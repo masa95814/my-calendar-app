@@ -104,15 +104,44 @@ export function authRoutes(deps: AuthRouteDeps) {
           : await handleLink(deps, saved, identity, tokens);
       return backToApp(result);
     } catch (error) {
+      const code = classifyCallbackError(error);
       logger.error("OAuth コールバックの処理に失敗しました", {
         purpose: saved.purpose,
+        code,
         error: String(error),
       });
-      return backToApp({ error: "callback_failed" });
+      return backToApp({ error: code });
     }
   });
 
   return app;
+}
+
+/**
+ * コールバック処理中の例外を、アプリ側で案内を出し分けられるエラーコードに分類する。
+ * Google からのメッセージ文字列に依存するため、分類できないものは callback_failed にする。
+ */
+export function classifyCallbackError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    /calendar/i.test(message) &&
+    /has not been used in project|is disabled/i.test(message)
+  ) {
+    // GCP プロジェクトで Google Calendar API が有効化されていない
+    return "calendar_api_disabled";
+  }
+  if (/invalid_grant/i.test(message)) {
+    // 認可コードが期限切れ・使用済み、またはリダイレクト URI が一致しない
+    return "invalid_grant";
+  }
+  if (/invalid_client|unauthorized_client/i.test(message)) {
+    // クライアント ID / シークレットが正しくない
+    return "invalid_client";
+  }
+  if (/redirect_uri_mismatch/i.test(message)) {
+    return "redirect_uri_mismatch";
+  }
+  return "callback_failed";
 }
 
 async function handleLogin(

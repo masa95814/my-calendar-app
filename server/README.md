@@ -53,6 +53,19 @@ test/                       vitest によるテスト（Firebase / Google は偽
 
 `return_to` は `APP_RETURN_URL_PREFIXES` で許可した先頭文字列に一致する URL だけ受け付けます。
 
+失敗時に `return_to?error=` に付く値:
+
+| 値                                                           | 意味                                                                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `expired`                                                    | state の有効期限切れ（10 分）。やり直す                                                                  |
+| `not_allowed`                                                | ログインに使ったアカウントが `OWNER_EMAILS` に無い                                                       |
+| `missing_refresh_token`                                      | Google がリフレッシュトークンを返さなかった。Google アカウント側でこのアプリのアクセス権を削除して再連携 |
+| `insufficient_scope`                                         | 同意画面でカレンダーの権限が許可されなかった                                                             |
+| `calendar_api_disabled`                                      | GCP プロジェクトで Google Calendar API が有効化されていない                                              |
+| `invalid_grant` / `invalid_client` / `redirect_uri_mismatch` | OAuth クライアントの設定不備（リダイレクト URI、クライアント ID / シークレット）                         |
+| `access_denied` など Google 由来の値                         | ユーザーが同意をキャンセルした、またはテストユーザー未登録                                               |
+| `callback_failed`                                            | 上記以外の失敗。サーバーログを確認する                                                                   |
+
 ## ローカルで動かす
 
 ```bash
