@@ -49,8 +49,8 @@ const config = {
   proseWrap: "always", // printWidth line breaks in md/mdx
   overrides: [
     {
-      // 日本語のドキュメントは行の途中で折り返すと表示上スペースが入るため、そのまま保持する
-      files: "docs/**/*.md",
+      // 日本語の Markdown は行の途中で折り返すと表示上スペースが入るため、折り返さずそのまま保持する
+      files: "**/*.md",
       options: { proseWrap: "preserve" },
     },
   ],
