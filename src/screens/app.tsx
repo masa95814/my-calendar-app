@@ -1,8 +1,9 @@
-import { registerRootComponent } from 'expo';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import CalendarComponent from './calendar';
+import { StyleSheet } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { registerRootComponent } from "expo";
+import { StatusBar } from "expo-status-bar";
+
+import CalendarComponent from "./calendar";
 
 const App = () => {
   return (
@@ -18,7 +19,7 @@ const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: "#F8F9FA",
   },
 });
 

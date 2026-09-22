@@ -1,40 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
+  Alert,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
-  ScrollView,
   TouchableOpacity,
-  Alert,
-  useWindowDimensions
-} from 'react-native';
-import { 
-  Calendar, 
-  CalendarList,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import {
   Agenda,
-  LocaleConfig,
-  DateData,
   AgendaEntry,
-  AgendaSchedule
-} from 'react-native-calendars';
+  AgendaSchedule,
+  Calendar,
+  CalendarList,
+  DateData,
+  LocaleConfig,
+} from "react-native-calendars";
 
 // 日本語設定
-LocaleConfig.locales['jp'] = {
+LocaleConfig.locales["jp"] = {
   monthNames: [
-    '1月', '2月', '3月', '4月', '5月', '6月',
-    '7月', '8月', '9月', '10月', '11月', '12月'
+    "1月",
+    "2月",
+    "3月",
+    "4月",
+    "5月",
+    "6月",
+    "7月",
+    "8月",
+    "9月",
+    "10月",
+    "11月",
+    "12月",
   ],
   monthNamesShort: [
-    '1月', '2月', '3月', '4月', '5月', '6月',
-    '7月', '8月', '9月', '10月', '11月', '12月'
+    "1月",
+    "2月",
+    "3月",
+    "4月",
+    "5月",
+    "6月",
+    "7月",
+    "8月",
+    "9月",
+    "10月",
+    "11月",
+    "12月",
   ],
   dayNames: [
-    '日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'
+    "日曜日",
+    "月曜日",
+    "火曜日",
+    "水曜日",
+    "木曜日",
+    "金曜日",
+    "土曜日",
   ],
-  dayNamesShort: ['日', '月', '火', '水', '木', '金', '土'],
-  today: '今日'
+  dayNamesShort: ["日", "月", "火", "水", "木", "金", "土"],
+  today: "今日",
 };
-LocaleConfig.defaultLocale = 'jp';
+LocaleConfig.defaultLocale = "jp";
 
 // カレンダーの左右マージン（横スクロールの CalendarList の幅計算にも使う）
 const CALENDAR_HORIZONTAL_MARGIN = 20;
@@ -43,8 +69,8 @@ const CALENDAR_HORIZONTAL_MARGIN = 20;
 // ※ Date#toISOString() は UTC 基準のため、日本時間の 0〜9 時は前日になってしまう
 const toDateString = (date: Date): string => {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
@@ -56,7 +82,7 @@ interface MarkedDates {
     selectedColor?: string;
     selectedTextColor?: string;
     dotColor?: string;
-    dots?: Array<{key: string; color: string}>;
+    dots?: Array<{ key: string; color: string }>;
     disabled?: boolean;
     disableTouchEvent?: boolean;
     customStyles?: {
@@ -69,7 +95,7 @@ interface MarkedDates {
 interface Event {
   date: string;
   title: string;
-  type: 'meeting' | 'deadline' | 'holiday' | 'personal';
+  type: "meeting" | "deadline" | "holiday" | "personal";
 }
 
 interface AgendaItem extends AgendaEntry {
@@ -77,7 +103,7 @@ interface AgendaItem extends AgendaEntry {
   time: string;
   duration: string;
   location?: string;
-  type: 'meeting' | 'task' | 'event' | 'reminder';
+  type: "meeting" | "task" | "event" | "reminder";
 }
 
 interface PeriodMarking {
@@ -91,35 +117,35 @@ interface PeriodMarking {
   };
 }
 
-type CalendarType = 'basic' | 'agenda' | 'period';
+type CalendarType = "basic" | "agenda" | "period";
 
 // 基本カレンダーコンポーネント
 const BasicCalendarView = () => {
-  const [selected, setSelected] = useState<string>('');
+  const [selected, setSelected] = useState<string>("");
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   // サンプルイベントデータ
   const events: Event[] = [
-    { date: '2024-01-15', title: '重要な会議', type: 'meeting' },
-    { date: '2024-01-20', title: 'プロジェクト締切', type: 'deadline' },
-    { date: '2024-01-25', title: '休暇', type: 'holiday' },
-    { date: '2024-01-28', title: '誕生日', type: 'personal' },
+    { date: "2024-01-15", title: "重要な会議", type: "meeting" },
+    { date: "2024-01-20", title: "プロジェクト締切", type: "deadline" },
+    { date: "2024-01-25", title: "休暇", type: "holiday" },
+    { date: "2024-01-28", title: "誕生日", type: "personal" },
   ];
 
   const eventColors = {
-    meeting: '#4ECDC4',
-    deadline: '#FF6B6B',
-    holiday: '#95E1D3',
-    personal: '#F38181'
+    meeting: "#4ECDC4",
+    deadline: "#FF6B6B",
+    holiday: "#95E1D3",
+    personal: "#F38181",
   };
 
   const getMarkedDates = (): MarkedDates => {
     const marked: MarkedDates = {};
-    
-    events.forEach(event => {
+
+    events.forEach((event) => {
       marked[event.date] = {
         marked: true,
-        dotColor: eventColors[event.type]
+        dotColor: eventColors[event.type],
       };
     });
 
@@ -127,8 +153,8 @@ const BasicCalendarView = () => {
       marked[selected] = {
         ...marked[selected],
         selected: true,
-        selectedColor: '#007AFF',
-        selectedTextColor: '#FFFFFF'
+        selectedColor: "#007AFF",
+        selectedTextColor: "#FFFFFF",
       };
     }
 
@@ -137,10 +163,10 @@ const BasicCalendarView = () => {
       ...marked[today],
       customStyles: {
         text: {
-          color: '#007AFF',
-          fontWeight: 'bold'
-        }
-      }
+          color: "#007AFF",
+          fontWeight: "bold",
+        },
+      },
     };
 
     return marked;
@@ -148,15 +174,11 @@ const BasicCalendarView = () => {
 
   const onDayPress = (day: DateData) => {
     setSelected(day.dateString);
-    
-    const dayEvents = events.filter(e => e.date === day.dateString);
+
+    const dayEvents = events.filter((e) => e.date === day.dateString);
     if (dayEvents.length > 0) {
-      const eventTitles = dayEvents.map(e => e.title).join('\n');
-      Alert.alert(
-        `${day.dateString}のイベント`,
-        eventTitles,
-        [{ text: 'OK' }]
-      );
+      const eventTitles = dayEvents.map((e) => e.title).join("\n");
+      Alert.alert(`${day.dateString}のイベント`, eventTitles, [{ text: "OK" }]);
     }
   };
 
@@ -168,44 +190,52 @@ const BasicCalendarView = () => {
         onMonthChange={(month) => setCurrentMonth(new Date(month.timestamp))}
         markedDates={getMarkedDates()}
         theme={{
-          calendarBackground: '#FFFFFF',
-          textSectionTitleColor: '#666666',
-          selectedDayTextColor: '#FFFFFF',
-          todayTextColor: '#007AFF',
-          dayTextColor: '#2D4150',
-          textDisabledColor: '#D9E1E8',
-          arrowColor: '#007AFF',
-          monthTextColor: '#007AFF',
+          calendarBackground: "#FFFFFF",
+          textSectionTitleColor: "#666666",
+          selectedDayTextColor: "#FFFFFF",
+          todayTextColor: "#007AFF",
+          dayTextColor: "#2D4150",
+          textDisabledColor: "#D9E1E8",
+          arrowColor: "#007AFF",
+          monthTextColor: "#007AFF",
           textMonthFontSize: 18,
-          textMonthFontWeight: 'bold',
+          textMonthFontWeight: "bold",
           textDayFontSize: 16,
         }}
         style={styles.calendar}
       />
-      
+
       {selected ? (
         <View style={styles.selectedInfo}>
           <Text style={styles.selectedDate}>選択された日付: {selected}</Text>
         </View>
       ) : null}
-      
+
       <View style={styles.legend}>
         <Text style={styles.legendTitle}>イベントカテゴリー</Text>
         <View style={styles.legendItems}>
           <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: eventColors.meeting }]} />
+            <View
+              style={[styles.dot, { backgroundColor: eventColors.meeting }]}
+            />
             <Text style={styles.legendText}>会議</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: eventColors.deadline }]} />
+            <View
+              style={[styles.dot, { backgroundColor: eventColors.deadline }]}
+            />
             <Text style={styles.legendText}>締切</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: eventColors.holiday }]} />
+            <View
+              style={[styles.dot, { backgroundColor: eventColors.holiday }]}
+            />
             <Text style={styles.legendText}>休暇</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: eventColors.personal }]} />
+            <View
+              style={[styles.dot, { backgroundColor: eventColors.personal }]}
+            />
             <Text style={styles.legendText}>個人</Text>
           </View>
         </View>
@@ -220,13 +250,13 @@ const AgendaView = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadItems = (day: DateData) => {
-    const newItems: AgendaSchedule = {...items};
-    
+    const newItems: AgendaSchedule = { ...items };
+
     setTimeout(() => {
       for (let i = -15; i < 85; i++) {
         const time = day.timestamp + i * 24 * 60 * 60 * 1000;
-        const strTime = new Date(time).toISOString().split('T')[0];
-        
+        const strTime = new Date(time).toISOString().split("T")[0];
+
         if (!newItems[strTime]) {
           newItems[strTime] = [];
           const numItems = Math.floor(Math.random() * 3 + 1);
@@ -238,7 +268,7 @@ const AgendaView = () => {
               location: getRandomLocation(),
               type: getRandomType(),
               height: 80,
-              day: strTime
+              day: strTime,
             } as AgendaItem);
           }
         }
@@ -249,25 +279,29 @@ const AgendaView = () => {
   };
 
   const getRandomEvent = (index: number) => {
-    const events = ['開発チームミーティング', 'クライアント打ち合わせ', 'コードレビュー'];
+    const events = [
+      "開発チームミーティング",
+      "クライアント打ち合わせ",
+      "コードレビュー",
+    ];
     return events[index % events.length];
   };
 
   const getRandomTime = (index: number) => {
-    const times = ['09:00', '10:30', '14:00'];
+    const times = ["09:00", "10:30", "14:00"];
     return times[index % times.length];
   };
 
-  const getRandomDuration = () => '1時間';
-  const getRandomLocation = () => '会議室A';
-  const getRandomType = (): AgendaItem['type'] => 'meeting';
+  const getRandomDuration = () => "1時間";
+  const getRandomLocation = () => "会議室A";
+  const getRandomType = (): AgendaItem["type"] => "meeting";
 
   // Agenda の renderItem は AgendaEntry を受け取る型なので、ここで AgendaItem に絞り込む
   const renderItem = (reservation: AgendaEntry) => {
     const item = reservation as AgendaItem;
     return (
       <TouchableOpacity
-        style={[styles.item, { borderLeftColor: '#4ECDC4' }]}
+        style={[styles.item, { borderLeftColor: "#4ECDC4" }]}
         onPress={() => Alert.alert(item.name, `時間: ${item.time}`)}
       >
         <View style={styles.itemContent}>
@@ -311,10 +345,10 @@ const AgendaView = () => {
         });
       }}
       theme={{
-        agendaDayTextColor: '#007AFF',
-        agendaDayNumColor: '#007AFF',
-        agendaTodayColor: '#007AFF',
-        agendaKnobColor: '#007AFF',
+        agendaDayTextColor: "#007AFF",
+        agendaDayNumColor: "#007AFF",
+        agendaTodayColor: "#007AFF",
+        agendaKnobColor: "#007AFF",
       }}
       style={styles.agenda}
     />
@@ -323,8 +357,8 @@ const AgendaView = () => {
 
 // 期間選択コンポーネント
 const PeriodView = () => {
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [markedDates, setMarkedDates] = useState<PeriodMarking>({});
   // 横スクロールの CalendarList は calendarWidth（デフォルトは画面幅）単位でページングされるため、
   // 左右マージン分を引いた幅を渡さないと 2 ページ目以降がずれていく
@@ -335,36 +369,36 @@ const PeriodView = () => {
     const marked: PeriodMarking = {};
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
-    
+
     for (let time = startTime; time <= endTime; time += 24 * 60 * 60 * 1000) {
-      const date = new Date(time).toISOString().split('T')[0];
+      const date = new Date(time).toISOString().split("T")[0];
       marked[date] = {
-        color: '#E3F2FD',
-        textColor: '#007AFF',
+        color: "#E3F2FD",
+        textColor: "#007AFF",
         startingDay: date === start,
         endingDay: date === end,
       };
     }
-    
+
     return marked;
   };
 
   const onDayPress = (day: DateData) => {
     if (!startDate || (startDate && endDate)) {
       setStartDate(day.dateString);
-      setEndDate('');
+      setEndDate("");
       setMarkedDates({
         [day.dateString]: {
-          color: '#007AFF',
-          textColor: '#FFFFFF',
+          color: "#007AFF",
+          textColor: "#FFFFFF",
           startingDay: true,
           endingDay: true,
-        }
+        },
       });
     } else if (startDate && !endDate) {
       const start = new Date(startDate).getTime();
       const end = new Date(day.dateString).getTime();
-      
+
       if (end < start) {
         const newMarked = markPeriod(day.dateString, startDate);
         setStartDate(day.dateString);
@@ -385,24 +419,20 @@ const PeriodView = () => {
         pagingEnabled={true}
         calendarWidth={calendarWidth}
         onDayPress={onDayPress}
-        markingType={'period'}
+        markingType={"period"}
         markedDates={markedDates}
         theme={{
-          calendarBackground: '#FFFFFF',
-          textSectionTitleColor: '#666666',
-          todayTextColor: '#007AFF',
-          dayTextColor: '#2D4150',
+          calendarBackground: "#FFFFFF",
+          textSectionTitleColor: "#666666",
+          todayTextColor: "#007AFF",
+          dayTextColor: "#2D4150",
         }}
         style={styles.calendar}
       />
-      
+
       <View style={styles.selectionInfo}>
-        {startDate && (
-          <Text style={styles.date}>開始日: {startDate}</Text>
-        )}
-        {endDate && (
-          <Text style={styles.date}>終了日: {endDate}</Text>
-        )}
+        {startDate && <Text style={styles.date}>開始日: {startDate}</Text>}
+        {endDate && <Text style={styles.date}>終了日: {endDate}</Text>}
       </View>
     </ScrollView>
   );
@@ -410,15 +440,15 @@ const PeriodView = () => {
 
 // メインのカレンダーコンポーネント
 const CalendarComponent = () => {
-  const [selectedType, setSelectedType] = useState<CalendarType>('basic');
+  const [selectedType, setSelectedType] = useState<CalendarType>("basic");
 
   const renderCalendar = () => {
     switch (selectedType) {
-      case 'basic':
+      case "basic":
         return <BasicCalendarView />;
-      case 'agenda':
+      case "agenda":
         return <AgendaView />;
-      case 'period':
+      case "period":
         return <PeriodView />;
     }
   };
@@ -428,32 +458,47 @@ const CalendarComponent = () => {
     <View style={styles.root}>
       <View style={styles.tabContainer}>
         <TouchableOpacity
-          style={[styles.tab, selectedType === 'basic' && styles.activeTab]}
-          onPress={() => setSelectedType('basic')}
+          style={[styles.tab, selectedType === "basic" && styles.activeTab]}
+          onPress={() => setSelectedType("basic")}
         >
-          <Text style={[styles.tabText, selectedType === 'basic' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              selectedType === "basic" && styles.activeTabText,
+            ]}
+          >
             基本
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, selectedType === 'agenda' && styles.activeTab]}
-          onPress={() => setSelectedType('agenda')}
+          style={[styles.tab, selectedType === "agenda" && styles.activeTab]}
+          onPress={() => setSelectedType("agenda")}
         >
-          <Text style={[styles.tabText, selectedType === 'agenda' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              selectedType === "agenda" && styles.activeTabText,
+            ]}
+          >
             アジェンダ
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, selectedType === 'period' && styles.activeTab]}
-          onPress={() => setSelectedType('period')}
+          style={[styles.tab, selectedType === "period" && styles.activeTab]}
+          onPress={() => setSelectedType("period")}
         >
-          <Text style={[styles.tabText, selectedType === 'period' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              selectedType === "period" && styles.activeTabText,
+            ]}
+          >
             期間選択
           </Text>
         </TouchableOpacity>
       </View>
-      
-      {selectedType === 'agenda' ? (
+
+      {selectedType === "agenda" ? (
         <View style={{ flex: 1 }}>{renderCalendar()}</View>
       ) : (
         renderCalendar()
@@ -465,20 +510,20 @@ const CalendarComponent = () => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: "#F8F9FA",
   },
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: "#F8F9FA",
   },
   tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 5,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -486,27 +531,27 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginHorizontal: 5,
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
   },
   tabText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
   },
   activeTabText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   calendar: {
     marginHorizontal: CALENDAR_HORIZONTAL_MARGIN,
     marginTop: 20,
     borderRadius: 10,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -518,49 +563,49 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
     padding: 15,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: "#E3F2FD",
     borderRadius: 8,
   },
   selectedDate: {
     fontSize: 16,
-    textAlign: 'center',
-    color: '#007AFF',
-    fontWeight: '500',
+    textAlign: "center",
+    color: "#007AFF",
+    fontWeight: "500",
   },
   selectionInfo: {
     marginHorizontal: 20,
     marginTop: 20,
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
   },
   date: {
     fontSize: 16,
-    color: '#007AFF',
+    color: "#007AFF",
     marginBottom: 5,
   },
   legend: {
     marginHorizontal: 20,
     marginTop: 25,
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
   },
   legendTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 15,
-    color: '#333',
+    color: "#333",
   },
   legendItems: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '48%',
+    flexDirection: "row",
+    alignItems: "center",
+    width: "48%",
     marginBottom: 10,
   },
   dot: {
@@ -571,10 +616,10 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   item: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     padding: 15,
     marginRight: 10,
@@ -586,21 +631,21 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 5,
   },
   itemDetails: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
   },
   itemTime: {
     fontSize: 14,
-    color: '#007AFF',
+    color: "#007AFF",
   },
   itemDuration: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   emptyDate: {
     height: 80,
@@ -608,8 +653,8 @@ const styles = StyleSheet.create({
   },
   emptyDateText: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    color: "#999",
+    textAlign: "center",
   },
 });
 
