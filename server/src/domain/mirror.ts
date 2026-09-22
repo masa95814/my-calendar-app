@@ -84,6 +84,7 @@ export function buildMirrorEvent(
     ...(rule.output.visibility !== "default"
       ? { visibility: rule.output.visibility }
       : {}),
+    ...(rule.output.colorId ? { colorId: rule.output.colorId } : {}),
     // ミラー予定で通知が鳴らないようにする
     reminders: { useDefault: false, overrides: [] },
     extendedProperties: {
@@ -120,6 +121,7 @@ export function fingerprintOf(body: CalendarEvent): string {
     start: body.start ?? null,
     end: body.end ?? null,
     visibility: body.visibility ?? null,
+    colorId: body.colorId ?? null,
     transparency: body.transparency ?? null,
     eventType: body.eventType ?? null,
     outOfOfficeProperties: body.outOfOfficeProperties ?? null,

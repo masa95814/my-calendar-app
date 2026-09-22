@@ -69,6 +69,8 @@ export type RuleOutput = {
   copyDescription: boolean;
   copyLocation: boolean;
   visibility: Visibility;
+  /** Google カレンダーの予定の色 ID（"1"〜"11"）。null は同期先カレンダーの既定の色 */
+  colorId: string | null;
   allDaySourceHandling: AllDaySourceHandling;
   autoDeclineMode: AutoDeclineMode;
   declineMessage: string;

@@ -52,6 +52,7 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       copyDescription: false,
       copyLocation: false,
       visibility: "public",
+      colorId: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -163,6 +164,16 @@ describe("buildMirrorEvent", () => {
     const busy = buildMirrorEvent(allDay, rule({ kind: "busy" }), context);
     expect(busy.start).toEqual({ date: "2026-09-25" });
     expect(busy.end).toEqual({ date: "2026-09-27" });
+  });
+});
+
+describe("予定の色", () => {
+  it("色を指定すると colorId を付け、既定なら付けない。色の変更は指紋に反映する", () => {
+    const tomato = buildMirrorEvent(timed, rule({ colorId: "11" }), context);
+    const none = buildMirrorEvent(timed, rule(), context);
+    expect(tomato.colorId).toBe("11");
+    expect(none.colorId).toBeUndefined();
+    expect(fingerprintOf(tomato)).not.toBe(fingerprintOf(none));
   });
 });
 

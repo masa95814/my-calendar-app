@@ -233,6 +233,36 @@ export function createSyncService(deps: SyncDeps) {
       timeZone: sourceTimeZone(group.account, group.calendarId),
     });
     const fingerprint = fingerprintOf(body);
+    // 予定の種類によっては色を受け付けないことがあるため、色付きで 400 になったら色なしで再試行する
+    const withoutColor = (): CalendarEvent => {
+      const { colorId: _omit, ...rest } = body;
+      return rest;
+    };
+    const insertMirror = async () => {
+      try {
+        return await targetClient.insertEvent(TARGET_CALENDAR_ID, body);
+      } catch (error) {
+        if (!body.colorId || !isBadRequest(error)) {
+          throw error;
+        }
+        logger.warn("色付きのミラー予定が拒否されたため、色なしで作成します", {
+          uid,
+          ruleId: rule.id,
+          error: describeError(error),
+        });
+        return targetClient.insertEvent(TARGET_CALENDAR_ID, withoutColor());
+      }
+    };
+    const patchMirror = async (calendarId: string, eventId: string) => {
+      try {
+        return await targetClient.patchEvent(calendarId, eventId, body);
+      } catch (error) {
+        if (!body.colorId || !isBadRequest(error)) {
+          throw error;
+        }
+        return targetClient.patchEvent(calendarId, eventId, withoutColor());
+      }
+    };
     const record = (targetEventId: string): MirrorRecord => ({
       id,
       ruleId: rule.id,
@@ -248,7 +278,7 @@ export function createSyncService(deps: SyncDeps) {
     });
 
     if (!existing) {
-      const created = await targetClient.insertEvent(TARGET_CALENDAR_ID, body);
+      const created = await insertMirror();
       await stores.mirrors.upsert(uid, record(created.id ?? ""));
       summary.created++;
       return;
@@ -260,7 +290,7 @@ export function createSyncService(deps: SyncDeps) {
         existing.targetCalendarId,
         existing.targetEventId,
       );
-      const created = await targetClient.insertEvent(TARGET_CALENDAR_ID, body);
+      const created = await insertMirror();
       await stores.mirrors.upsert(uid, record(created.id ?? ""));
       summary.updated++;
       return;
@@ -272,18 +302,14 @@ export function createSyncService(deps: SyncDeps) {
     }
 
     try {
-      await targetClient.patchEvent(
-        existing.targetCalendarId,
-        existing.targetEventId,
-        body,
-      );
+      await patchMirror(existing.targetCalendarId, existing.targetEventId);
       await stores.mirrors.upsert(uid, record(existing.targetEventId));
     } catch (error) {
       if (!(error instanceof NotFoundError)) {
         throw error;
       }
       // 同期先で手動削除されていたら作り直す（設計方針: ミラーは再作成する）
-      const created = await targetClient.insertEvent(TARGET_CALENDAR_ID, body);
+      const created = await insertMirror();
       await stores.mirrors.upsert(uid, record(created.id ?? ""));
     }
     summary.updated++;
@@ -851,6 +877,16 @@ export type UnifiedEvent = {
 };
 
 export type SyncService = ReturnType<typeof createSyncService>;
+
+/** Google API の 400（リクエスト内容の不備） */
+function isBadRequest(error: unknown): boolean {
+  const e = error as {
+    code?: number | string;
+    status?: number;
+    response?: { status?: number };
+  };
+  return Number(e.response?.status ?? e.status ?? e.code ?? 0) === 400;
+}
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import {
   Choice,
+  ColorChoice,
   Field,
   MultiChoice,
   PrimaryButton,
@@ -33,6 +34,7 @@ import {
   AUTO_DECLINE_LABELS,
   defaultKindFor,
   defaultRuleInput,
+  EVENT_COLORS,
   OUTPUT_KIND_LABELS,
   parseKeywords,
   primaryCalendarIds,
@@ -506,6 +508,17 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
             value={input.output.copyLocation}
             onValueChange={(copyLocation) => updateOutput({ copyLocation })}
           />
+          <Field
+            label="予定の色"
+            help="同期先の Google カレンダーでミラー予定を表示する色です"
+          >
+            <ColorChoice
+              options={EVENT_COLORS}
+              value={input.output.colorId}
+              onChange={(colorId) => updateOutput({ colorId })}
+              defaultLabel="カレンダーの既定の色"
+            />
+          </Field>
           <Field label="公開設定">
             <Choice
               options={(["public", "private", "default"] as const).map((v) => ({

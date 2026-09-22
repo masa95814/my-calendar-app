@@ -419,3 +419,59 @@ describe("同期エンジン: 連携解除", () => {
     expect(h.google.revoked).toEqual(["rt-acc-b"]);
   });
 });
+
+describe("同期エンジン: 予定の色", () => {
+  it("指定した色でミラーを作り、色を変えると既存のミラーも更新する", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    const { rule } = await createRule(h, {
+      ...ruleInput,
+      output: { kind: "busy", colorId: "5" },
+    });
+    expect(mirrorsInB(h)[0]?.colorId).toBe("5");
+
+    const res = await h.app.request(`/api/rules/${rule.id}`, {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        ...ruleInput,
+        output: { kind: "busy", colorId: "11" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as RuleResponse).summary).toMatchObject({
+      updated: 1,
+    });
+    expect(mirrorsInB(h)[0]?.colorId).toBe("11");
+  });
+
+  it("Google が色を拒否（400）したら色なしで作成する", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    const calls: (string | undefined | null)[] = [];
+    const wrapped = h.calendars.clientFor;
+    h.calendars.clientFor = (accountId) => {
+      const c = wrapped(accountId);
+      if (accountId !== "acc-b") return c;
+      return {
+        ...c,
+        async insertEvent(calendarId, event) {
+          calls.push(event.colorId);
+          if (event.colorId) {
+            throw Object.assign(new Error("Invalid color"), { code: 400 });
+          }
+          return c.insertEvent(calendarId, event);
+        },
+      };
+    };
+    const { summary } = await createRule(h, {
+      ...ruleInput,
+      output: { kind: "outOfOffice", colorId: "3" },
+    });
+    expect(summary).toMatchObject({ created: 1, errors: [] });
+    expect(calls).toEqual(["3", undefined]);
+    expect(mirrorsInB(h)[0]?.colorId).toBeUndefined();
+  });
+});

@@ -172,6 +172,58 @@ export function MultiChoice<T extends string>({
   );
 }
 
+/** 色の選択。value が null のときは「既定」 */
+export function ColorChoice({
+  options,
+  value,
+  onChange,
+  defaultLabel,
+}: {
+  options: readonly { id: string; label: string; hex: string }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+  defaultLabel: string;
+}) {
+  const selectedLabel =
+    value === null
+      ? defaultLabel
+      : (options.find((o) => o.id === value)?.label ?? value);
+  return (
+    <View>
+      <View style={styles.swatches}>
+        <Pressable
+          onPress={() => onChange(null)}
+          accessibilityRole="radio"
+          accessibilityLabel={defaultLabel}
+          accessibilityState={{ selected: value === null }}
+          style={[
+            styles.swatch,
+            styles.swatchDefault,
+            value === null && styles.swatchSelected,
+          ]}
+        >
+          <Text style={styles.swatchDefaultText}>既定</Text>
+        </Pressable>
+        {options.map((option) => (
+          <Pressable
+            key={option.id}
+            onPress={() => onChange(option.id)}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected: value === option.id }}
+            style={[
+              styles.swatch,
+              { backgroundColor: option.hex },
+              value === option.id && styles.swatchSelected,
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={styles.help}>選択中: {selectedLabel}</Text>
+    </View>
+  );
+}
+
 export function PrimaryButton({
   title,
   onPress,
@@ -287,6 +339,31 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+  swatches: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  swatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  swatchSelected: {
+    borderColor: "#2D4150",
+  },
+  swatchDefault: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#D0D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchDefaultText: {
+    fontSize: 10,
+    color: "#666666",
   },
   button: {
     backgroundColor: "#007AFF",
