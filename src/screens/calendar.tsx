@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  ScrollView, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
   TouchableOpacity,
   Alert,
-  SafeAreaView
+  useWindowDimensions
 } from 'react-native';
 import { 
   Calendar, 
@@ -35,6 +35,18 @@ LocaleConfig.locales['jp'] = {
   today: '今日'
 };
 LocaleConfig.defaultLocale = 'jp';
+
+// カレンダーの左右マージン（横スクロールの CalendarList の幅計算にも使う）
+const CALENDAR_HORIZONTAL_MARGIN = 20;
+
+// 端末のローカル日付を 'YYYY-MM-DD' 形式にする
+// ※ Date#toISOString() は UTC 基準のため、日本時間の 0〜9 時は前日になってしまう
+const toDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // 型定義
 interface MarkedDates {
@@ -120,7 +132,7 @@ const BasicCalendarView = () => {
       };
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = toDateString(new Date());
     marked[today] = {
       ...marked[today],
       customStyles: {
@@ -151,7 +163,7 @@ const BasicCalendarView = () => {
   return (
     <ScrollView style={styles.container}>
       <Calendar
-        current={currentMonth.toISOString().split('T')[0]}
+        current={toDateString(currentMonth)}
         onDayPress={onDayPress}
         onMonthChange={(month) => setCurrentMonth(new Date(month.timestamp))}
         markedDates={getMarkedDates()}
@@ -250,20 +262,24 @@ const AgendaView = () => {
   const getRandomLocation = () => '会議室A';
   const getRandomType = (): AgendaItem['type'] => 'meeting';
 
-  const renderItem = (item: AgendaItem) => (
-    <TouchableOpacity
-      style={[styles.item, { borderLeftColor: '#4ECDC4' }]}
-      onPress={() => Alert.alert(item.name, `時間: ${item.time}`)}
-    >
-      <View style={styles.itemContent}>
-        <Text style={styles.itemTitle}>{item.name}</Text>
-        <View style={styles.itemDetails}>
-          <Text style={styles.itemTime}>{item.time}</Text>
-          <Text style={styles.itemDuration}>{item.duration}</Text>
+  // Agenda の renderItem は AgendaEntry を受け取る型なので、ここで AgendaItem に絞り込む
+  const renderItem = (reservation: AgendaEntry) => {
+    const item = reservation as AgendaItem;
+    return (
+      <TouchableOpacity
+        style={[styles.item, { borderLeftColor: '#4ECDC4' }]}
+        onPress={() => Alert.alert(item.name, `時間: ${item.time}`)}
+      >
+        <View style={styles.itemContent}>
+          <Text style={styles.itemTitle}>{item.name}</Text>
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemTime}>{item.time}</Text>
+            <Text style={styles.itemDuration}>{item.duration}</Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyDate = () => (
     <View style={styles.emptyDate}>
@@ -275,16 +291,24 @@ const AgendaView = () => {
     <Agenda
       items={items}
       loadItemsForMonth={loadItems}
-      selected={new Date().toISOString().split('T')[0]}
+      selected={toDateString(new Date())}
       renderItem={renderItem}
       renderEmptyDate={renderEmptyDate}
-      rowHasChanged={(r1: AgendaItem, r2: AgendaItem) => r1.name !== r2.name}
+      rowHasChanged={(r1, r2) => r1.name !== r2.name}
       showClosingKnob={true}
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
         setItems({});
-        loadItems({ dateString: '', day: 0, month: 0, timestamp: Date.now(), year: 0 });
+        // ライブラリが渡す DateData と同じ形（timestamp は UTC 0時）で今日を渡す
+        const now = new Date();
+        loadItems({
+          dateString: toDateString(now),
+          day: now.getDate(),
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+          timestamp: Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()),
+        });
       }}
       theme={{
         agendaDayTextColor: '#007AFF',
@@ -302,6 +326,10 @@ const PeriodView = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [markedDates, setMarkedDates] = useState<PeriodMarking>({});
+  // 横スクロールの CalendarList は calendarWidth（デフォルトは画面幅）単位でページングされるため、
+  // 左右マージン分を引いた幅を渡さないと 2 ページ目以降がずれていく
+  const { width: windowWidth } = useWindowDimensions();
+  const calendarWidth = windowWidth - CALENDAR_HORIZONTAL_MARGIN * 2;
 
   const markPeriod = (start: string, end: string) => {
     const marked: PeriodMarking = {};
@@ -355,6 +383,7 @@ const PeriodView = () => {
       <CalendarList
         horizontal={true}
         pagingEnabled={true}
+        calendarWidth={calendarWidth}
         onDayPress={onDayPress}
         markingType={'period'}
         markedDates={markedDates}
@@ -394,8 +423,9 @@ const CalendarComponent = () => {
     }
   };
 
+  // SafeAreaView は app.tsx 側で当てているので、ここでは通常の View にする
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, selectedType === 'basic' && styles.activeTab]}
@@ -428,12 +458,12 @@ const CalendarComponent = () => {
       ) : (
         renderCalendar()
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
@@ -472,7 +502,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   calendar: {
-    marginHorizontal: 20,
+    marginHorizontal: CALENDAR_HORIZONTAL_MARGIN,
     marginTop: 20,
     borderRadius: 10,
     elevation: 5,

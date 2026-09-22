@@ -1,16 +1,19 @@
 import { registerRootComponent } from 'expo';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, SafeAreaView } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import CalendarComponent from './calendar';
 
 const App = () => {
   return (
-    <SafeAreaView style={styles.container}>
-      <CalendarComponent />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <CalendarComponent />
+      </SafeAreaView>
       <StatusBar style="auto" />
-    </SafeAreaView>
+    </SafeAreaProvider>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
