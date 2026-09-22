@@ -15,7 +15,6 @@ import type {
   OAuthState,
   Stores,
   SyncState,
-  WatchChannel,
 } from "./index.js";
 
 // Firestore の構造は docs/requirements-and-design.md の 6.3 を参照
