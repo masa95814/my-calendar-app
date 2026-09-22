@@ -34,26 +34,29 @@ test/                       vitest によるテスト（Firebase / Google / Cale
 
 ## エンドポイント
 
-| メソッド | パス                           | 認証 | 用途                                                                                                                            |
-| -------- | ------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------- |
-| GET      | `/healthz`                     | 不要 | ヘルスチェック                                                                                                                  |
-| GET      | `/auth/login/start?return_to=` | 不要 | アプリへのログイン開始。Google の同意画面へリダイレクト                                                                         |
-| GET      | `/auth/google/callback`        | 不要 | Google からのコールバック。完了後 `return_to` に `?token=`（ログイン）または `?linked=`（連携）を付けて戻す。失敗時は `?error=` |
-| GET      | `/api/me`                      | 必要 | ログイン確認                                                                                                                    |
-| GET      | `/api/accounts`                | 必要 | 連携アカウント一覧（トークンは含まない）                                                                                        |
-| POST     | `/api/accounts/link`           | 必要 | 連携開始。`{ "returnTo": "..." }` を渡すと同意画面の `url` が返る                                                               |
-| DELETE   | `/api/accounts/:id`            | 必要 | 連携解除（Google 側のトークンも失効。そのアカウントを使う同期設定は無効化）                                                     |
-| GET      | `/api/rules`                   | 必要 | 同期設定の一覧                                                                                                                  |
-| POST     | `/api/rules`                   | 必要 | 同期設定の作成。形式エラーは 400（`details` に項目ごとの理由）、同じ送信元と同期先の組み合わせは 409                            |
-| GET      | `/api/rules/:id`               | 必要 | 同期設定の取得                                                                                                                  |
-| PUT      | `/api/rules/:id`               | 必要 | 同期設定の更新（全体置換）                                                                                                      |
-| DELETE   | `/api/rules/:id`               | 必要 | 同期設定の削除（ミラー予定も削除）                                                                                              |
-| POST     | `/api/rules/:id/sync`          | 必要 | その同期設定を手動で全件同期                                                                                                    |
-| POST     | `/api/sync`                    | 必要 | すべての同期設定を手動で全件同期                                                                                                |
-| POST     | `/tasks/poll`                  | 秘密 | 差分同期（Cloud Scheduler から 10 分間隔を想定）                                                                                |
-| POST     | `/tasks/full-resync`           | 秘密 | 全件同期（1 日 1 回を想定。同期範囲の前進と孤児ミラーの掃除）                                                                   |
-| POST     | `/tasks/renew-watch`           | 秘密 | watch チャネルの登録・更新（1 日 1 回を想定。`PUBLIC_BASE_URL` が必要）                                                         |
-| POST     | `/webhooks/calendar`           | 不要 | Google からの変更通知（チャネル ID とトークンで検証）                                                                           |
+| メソッド | パス                              | 認証 | 用途                                                                                                                            |
+| -------- | --------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GET      | `/healthz`                        | 不要 | ヘルスチェック                                                                                                                  |
+| GET      | `/auth/login/start?return_to=`    | 不要 | アプリへのログイン開始。Google の同意画面へリダイレクト                                                                         |
+| GET      | `/auth/google/callback`           | 不要 | Google からのコールバック。完了後 `return_to` に `?token=`（ログイン）または `?linked=`（連携）を付けて戻す。失敗時は `?error=` |
+| GET      | `/api/me`                         | 必要 | ログイン確認                                                                                                                    |
+| GET      | `/api/accounts`                   | 必要 | 連携アカウント一覧（トークンは含まない）                                                                                        |
+| POST     | `/api/accounts/link`              | 必要 | 連携開始。`{ "returnTo": "..." }` を渡すと同意画面の `url` が返る                                                               |
+| DELETE   | `/api/accounts/:id`               | 必要 | 連携解除（Google 側のトークンも失効。そのアカウントを使う同期設定は無効化）                                                     |
+| GET      | `/api/rules`                      | 必要 | 同期設定の一覧                                                                                                                  |
+| POST     | `/api/rules`                      | 必要 | 同期設定の作成。形式エラーは 400（`details` に項目ごとの理由）、同じ送信元と同期先の組み合わせは 409                            |
+| GET      | `/api/rules/:id`                  | 必要 | 同期設定の取得                                                                                                                  |
+| PUT      | `/api/rules/:id`                  | 必要 | 同期設定の更新（全体置換）                                                                                                      |
+| DELETE   | `/api/rules/:id`                  | 必要 | 同期設定の削除（ミラー予定も削除）                                                                                              |
+| POST     | `/api/rules/:id/sync`             | 必要 | その同期設定を手動で全件同期                                                                                                    |
+| POST     | `/api/sync`                       | 必要 | すべての同期設定を手動で全件同期                                                                                                |
+| POST     | `/api/accounts/:id/purge-mirrors` | 必要 | そのアカウントのメインカレンダーにある本アプリのミラー予定を、対応表の有無に関わらずすべて削除（復旧用）                        |
+| GET      | `/api/events?from=&to=`           | 必要 | 統合カレンダー表示用。全連携アカウントのメインカレンダーの予定（ミラーには `isMirror` の印）。期間は 62 日以内                  |
+| GET      | `/api/status`                     | 必要 | 連携アカウント・同期設定（最終同期・エラー）・同期状態（watch の有無）のまとめ                                                  |
+| POST     | `/tasks/poll`                     | 秘密 | 差分同期（Cloud Scheduler から 10 分間隔を想定）                                                                                |
+| POST     | `/tasks/full-resync`              | 秘密 | 全件同期（1 日 1 回を想定。同期範囲の前進と孤児ミラーの掃除）                                                                   |
+| POST     | `/tasks/renew-watch`              | 秘密 | watch チャネルの登録・更新（1 日 1 回を想定。`PUBLIC_BASE_URL` が必要）                                                         |
+| POST     | `/webhooks/calendar`              | 不要 | Google からの変更通知（チャネル ID とトークンで検証）                                                                           |
 
 「秘密」は `X-Tasks-Secret: <TASKS_SECRET>` ヘッダーが必要な意味です（開発で `TASKS_SECRET` が空なら不要）。
 

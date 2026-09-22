@@ -85,8 +85,8 @@ describe("buildMirrorEvent", () => {
     const body = buildMirrorEvent(timed, rule(), context);
     expect(body).toMatchObject({
       summary: "不在",
-      start: { dateTime: "2026-09-24T10:00:00+09:00", timeZone: "Asia/Tokyo" },
-      end: { dateTime: "2026-09-24T11:00:00+09:00", timeZone: "Asia/Tokyo" },
+      start: { dateTime: "2026-09-24T10:00:00+09:00" },
+      end: { dateTime: "2026-09-24T11:00:00+09:00" },
       transparency: "opaque",
       visibility: "private",
       eventType: "outOfOffice",

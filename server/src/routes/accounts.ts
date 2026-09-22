@@ -71,6 +71,18 @@ export function accountRoutes(deps: AccountRouteDeps) {
     return c.json({ url });
   });
 
+  // 対応表の有無に関わらず、そのアカウントのメインカレンダーにある本アプリのミラー予定をすべて削除する（復旧用）
+  app.post("/accounts/:id/purge-mirrors", async (c) => {
+    const uid = c.get("user").uid;
+    const accountId = c.req.param("id");
+    const account = await deps.stores.accounts.get(uid, accountId);
+    if (!account) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const result = await deps.sync.purgeMirrorsInAccount(uid, accountId);
+    return c.json(result);
+  });
+
   app.delete("/accounts/:id", async (c) => {
     const uid = c.get("user").uid;
     const accountId = c.req.param("id");

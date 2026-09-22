@@ -15,6 +15,7 @@ import {
 import type { LinkedAccount, Stores } from "./repositories/index.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { authRoutes, type FirebaseUserService } from "./routes/auth.js";
+import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
 import { ruleRoutes } from "./routes/rules.js";
 import { taskRoutes } from "./routes/tasks.js";
@@ -89,6 +90,7 @@ export function createApp(deps: AppDependencies) {
   });
   api.route("/", accountRoutes(shared));
   api.route("/", ruleRoutes(shared));
+  api.route("/", eventRoutes(shared));
   app.route("/api", api);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));

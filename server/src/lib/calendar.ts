@@ -13,6 +13,8 @@ export type ListEventsParams = {
   timeMin?: string;
   timeMax?: string;
   pageToken?: string;
+  /** extendedProperties.private の絞り込み（"key=value" 形式）。syncToken とは併用不可 */
+  privateExtendedProperty?: string[];
 };
 
 export type ListEventsResult = {
@@ -97,7 +99,15 @@ export function createCalendarClientFactory(options: {
             calendarId: params.calendarId,
             ...(params.syncToken
               ? { syncToken: params.syncToken }
-              : { timeMin: params.timeMin, timeMax: params.timeMax }),
+              : {
+                  timeMin: params.timeMin,
+                  timeMax: params.timeMax,
+                  ...(params.privateExtendedProperty
+                    ? {
+                        privateExtendedProperty: params.privateExtendedProperty,
+                      }
+                    : {}),
+                }),
             ...(params.pageToken ? { pageToken: params.pageToken } : {}),
             // 繰り返し予定は各回に展開し、キャンセルも受け取る
             singleEvents: true,

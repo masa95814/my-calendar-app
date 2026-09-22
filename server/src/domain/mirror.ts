@@ -56,14 +56,10 @@ export function buildMirrorEvent(
       end = { date: event.end?.date ?? null };
     }
   } else {
-    start = {
-      dateTime: event.start?.dateTime ?? null,
-      ...(event.start?.timeZone ? { timeZone: event.start.timeZone } : {}),
-    };
-    end = {
-      dateTime: event.end?.dateTime ?? null,
-      ...(event.end?.timeZone ? { timeZone: event.end.timeZone } : {}),
-    };
+    // dateTime にはオフセット（+09:00）が含まれるので、タイムゾーン名は写さない
+    // （Google が元予定に付ける名前が Asia/Dili のように不自然なことがある）
+    start = { dateTime: event.start?.dateTime ?? null };
+    end = { dateTime: event.end?.dateTime ?? null };
   }
 
   const descriptionParts: string[] = [];
