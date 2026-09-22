@@ -405,7 +405,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
           />
           <Field
             label="除外キーワード"
-            help="カンマ区切り。タイトルや説明にいずれかを含む予定は同期しません"
+            help="カンマ区切り。タイトルにいずれかを含む予定は同期しません（説明文は見ません）"
           >
             <TextField
               value={excludeText}

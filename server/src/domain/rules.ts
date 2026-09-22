@@ -47,7 +47,7 @@ export const ruleFiltersSchema = z.object({
   minAttendees: z.number().int().min(1).max(100).nullable().default(null),
   /** 会議リンクがある予定のみ */
   requireMeetLink: z.boolean().default(false),
-  /** タイトルまたは説明にいずれかを含む予定を除外 */
+  /** タイトルにいずれかを含む予定を除外（説明文は見ない） */
   excludeKeywords: keywordList,
   /** 指定時、タイトルまたは説明にいずれかを含む予定のみ同期 */
   includeKeywords: keywordList,

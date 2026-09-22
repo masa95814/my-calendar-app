@@ -150,11 +150,13 @@ export function evaluateEvent(
     return no("no_conference_link");
   }
 
-  const text =
-    `${event.summary ?? ""}\n${event.description ?? ""}`.toLowerCase();
+  // 除外キーワードはタイトルだけで判定する。説明文まで見ると、会議リンク（Teams の …@thread.v2 など）や
+  // 署名に含まれる文字で意図せず除外されてしまうため
+  const title = (event.summary ?? "").toLowerCase();
+  const text = `${title}\n${event.description ?? ""}`.toLowerCase();
   if (
     rule.filters.excludeKeywords.some((keyword) =>
-      text.includes(keyword.toLowerCase()),
+      title.includes(keyword.toLowerCase()),
     )
   ) {
     return no("exclude_keyword");
