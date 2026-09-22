@@ -11,17 +11,25 @@ src/
   app.ts                    Hono アプリの組み立て（ルート、エラーハンドリング）
   config.ts                 環境変数の検証と型付け
   lib/firebase.ts           Firebase Admin SDK の初期化
-  lib/google.ts             Google OAuth / Calendar API（同意 URL、トークン交換、ID トークン検証、カレンダー一覧）
+  lib/google.ts             Google OAuth（同意 URL、トークン交換、ID トークン検証、カレンダー一覧）
+  lib/calendar.ts           Google Calendar API（予定の一覧・作成・更新・削除、watch）とエラー分類
   lib/crypto.ts             リフレッシュトークンの暗号化（AES-256-GCM）
   lib/url.ts                アプリへ戻る URL の検証とクエリ付与
   lib/logger.ts             Cloud Logging 向けの JSON ログ
   middleware/auth.ts        Firebase ID トークン検証と利用者の制限
+  domain/rules.ts           同期設定のスキーマと検証（F2〜F4）
+  domain/filter.ts          元予定をフィルタ条件で評価（F3）
+  domain/mirror.ts          ミラー予定の組み立てと指紋（F4）
+  services/sync.ts          同期エンジン（全件 / 差分同期、ミラーの作成・更新・削除、watch チャネル）
   repositories/index.ts     永続化のインターフェースと型
   repositories/firestore.ts Firestore 実装
   routes/health.ts          ヘルスチェック
   routes/auth.ts            ログインと OAuth コールバック
   routes/accounts.ts        連携アカウントの一覧・連携開始・解除
-test/                       vitest によるテスト（Firebase / Google は偽物に差し替え）
+  routes/rules.ts           同期設定の CRUD と手動同期
+  routes/tasks.ts           Cloud Scheduler 用の定期処理
+  routes/webhooks.ts        Google の変更通知の受け口
+test/                       vitest によるテスト（Firebase / Google / Calendar API は偽物に差し替え）
 ```
 
 ## エンドポイント
@@ -39,7 +47,35 @@ test/                       vitest によるテスト（Firebase / Google は偽
 | POST     | `/api/rules`                   | 必要 | 同期設定の作成。形式エラーは 400（`details` に項目ごとの理由）、同じ送信元と同期先の組み合わせは 409                            |
 | GET      | `/api/rules/:id`               | 必要 | 同期設定の取得                                                                                                                  |
 | PUT      | `/api/rules/:id`               | 必要 | 同期設定の更新（全体置換）                                                                                                      |
-| DELETE   | `/api/rules/:id`               | 必要 | 同期設定の削除                                                                                                                  |
+| DELETE   | `/api/rules/:id`               | 必要 | 同期設定の削除（ミラー予定も削除）                                                                                              |
+| POST     | `/api/rules/:id/sync`          | 必要 | その同期設定を手動で全件同期                                                                                                    |
+| POST     | `/api/sync`                    | 必要 | すべての同期設定を手動で全件同期                                                                                                |
+| POST     | `/tasks/poll`                  | 秘密 | 差分同期（Cloud Scheduler から 10 分間隔を想定）                                                                                |
+| POST     | `/tasks/full-resync`           | 秘密 | 全件同期（1 日 1 回を想定。同期範囲の前進と孤児ミラーの掃除）                                                                   |
+| POST     | `/tasks/renew-watch`           | 秘密 | watch チャネルの登録・更新（1 日 1 回を想定。`PUBLIC_BASE_URL` が必要）                                                         |
+| POST     | `/webhooks/calendar`           | 不要 | Google からの変更通知（チャネル ID とトークンで検証）                                                                           |
+
+「秘密」は `X-Tasks-Secret: <TASKS_SECRET>` ヘッダーが必要な意味です（開発で `TASKS_SECRET` が空なら不要）。
+
+### 同期の仕組み
+
+- 同期設定の作成・更新・手動同期は、その送信元カレンダーの**全件同期**を行います（同期範囲内を取得し、範囲内で消えた元予定のミラーも掃除）
+- `/tasks/poll` と watch 通知は **差分同期** です（`syncToken` で変更分だけ取得）。`syncToken` が失効（410）したら自動で全件同期に切り替えます
+- ミラー予定には `extendedProperties.private.mcaApp = "1"` と元予定の情報を埋め込み、ミラーのミラーができないようにしています。対応表は Firestore の `users/{uid}/mirrors` にあります
+- 元予定が更新されたらミラーを更新、キャンセルやフィルタ対象外になったら削除、同期先で手動削除されていたら作り直します。種別（不在 / 予定あり）が変わった場合は作り直します
+- 送信元・同期先のトークンが失効したら、そのアカウントを `reauth_required` にし、同期設定の `lastError` に記録します
+
+### Cloud Scheduler の設定（デプロイ後）
+
+```bash
+SERVICE_URL=https://<サービスの URL>
+gcloud scheduler jobs create http calendar-poll --location asia-northeast1 --schedule "*/10 * * * *" \
+  --uri "$SERVICE_URL/tasks/poll" --http-method POST --headers "X-Tasks-Secret=<TASKS_SECRET>"
+gcloud scheduler jobs create http calendar-full-resync --location asia-northeast1 --schedule "15 3 * * *" \
+  --uri "$SERVICE_URL/tasks/full-resync" --http-method POST --headers "X-Tasks-Secret=<TASKS_SECRET>"
+gcloud scheduler jobs create http calendar-renew-watch --location asia-northeast1 --schedule "30 3 * * *" \
+  --uri "$SERVICE_URL/tasks/renew-watch" --http-method POST --headers "X-Tasks-Secret=<TASKS_SECRET>"
+```
 
 認証が必要な API は `Authorization: Bearer <Firebase ID トークン>` を付け、`OWNER_EMAILS` に含まれるメールアドレスのユーザーだけが呼べます。
 

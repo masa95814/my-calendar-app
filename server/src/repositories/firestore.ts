@@ -4,29 +4,40 @@ import {
   type Firestore,
 } from "firebase-admin/firestore";
 
-import type { SyncRule } from "../domain/rules.js";
+import type { OutputKind, SyncRule } from "../domain/rules.js";
 import type { CalendarSummary } from "../lib/google.js";
 import type {
   AccountStatus,
   AccountType,
   LinkedAccount,
+  MirrorRecord,
   OAuthPurpose,
   OAuthState,
   Stores,
+  SyncState,
+  WatchChannel,
 } from "./index.js";
 
 // Firestore の構造は docs/requirements-and-design.md の 6.3 を参照
 //   oauthStates/{state}
+//   channels/{channelId}
 //   users/{uid}
 //   users/{uid}/accounts/{accountId}
 //   users/{uid}/rules/{ruleId}
+//   users/{uid}/syncStates/{accountId~calendarId}
+//   users/{uid}/mirrors/{ruleId~calendarId~eventId}
 
 export function createFirestoreStores(db: Firestore): Stores {
   const statesCollection = db.collection("oauthStates");
-  const userDoc = (uid: string) => db.collection("users").doc(uid);
+  const channelsCollection = db.collection("channels");
+  const usersCollection = db.collection("users");
+  const userDoc = (uid: string) => usersCollection.doc(uid);
   const accountsCollection = (uid: string) =>
     userDoc(uid).collection("accounts");
   const rulesCollection = (uid: string) => userDoc(uid).collection("rules");
+  const syncStatesCollection = (uid: string) =>
+    userDoc(uid).collection("syncStates");
+  const mirrorsCollection = (uid: string) => userDoc(uid).collection("mirrors");
 
   return {
     oauthStates: {
@@ -100,6 +111,133 @@ export function createFirestoreStores(db: Firestore): Stores {
           },
           { merge: true },
         );
+      },
+      async listUids() {
+        const snapshot = await usersCollection.select().get();
+        return snapshot.docs.map((doc) => doc.id);
+      },
+    },
+
+    syncStates: {
+      async get(uid, id) {
+        const snapshot = await syncStatesCollection(uid).doc(id).get();
+        const data = snapshot.data();
+        return snapshot.exists && data
+          ? fromSyncStateDoc(snapshot.id, data)
+          : undefined;
+      },
+      async list(uid) {
+        const snapshot = await syncStatesCollection(uid).get();
+        return snapshot.docs.map((doc) => fromSyncStateDoc(doc.id, doc.data()));
+      },
+      async upsert(uid, state) {
+        await syncStatesCollection(uid)
+          .doc(state.id)
+          .set({
+            accountId: state.accountId,
+            calendarId: state.calendarId,
+            syncToken: state.syncToken,
+            lastFullSyncAt: toTimestampOrNull(state.lastFullSyncAt),
+            lastIncrementalSyncAt: toTimestampOrNull(
+              state.lastIncrementalSyncAt,
+            ),
+            channelId: state.channelId,
+            resourceId: state.resourceId,
+            channelToken: state.channelToken,
+            channelExpiresAt: toTimestampOrNull(state.channelExpiresAt),
+          });
+      },
+      async delete(uid, id) {
+        await syncStatesCollection(uid).doc(id).delete();
+      },
+    },
+
+    mirrors: {
+      async get(uid, id) {
+        const snapshot = await mirrorsCollection(uid).doc(id).get();
+        const data = snapshot.data();
+        return snapshot.exists && data
+          ? fromMirrorDoc(snapshot.id, data)
+          : undefined;
+      },
+      async upsert(uid, record) {
+        await mirrorsCollection(uid)
+          .doc(record.id)
+          .set({
+            ruleId: record.ruleId,
+            sourceAccountId: record.sourceAccountId,
+            sourceCalendarId: record.sourceCalendarId,
+            sourceEventId: record.sourceEventId,
+            targetAccountId: record.targetAccountId,
+            targetCalendarId: record.targetCalendarId,
+            targetEventId: record.targetEventId,
+            kind: record.kind,
+            fingerprint: record.fingerprint,
+            updatedAt: Timestamp.fromDate(record.updatedAt),
+          });
+      },
+      async delete(uid, id) {
+        await mirrorsCollection(uid).doc(id).delete();
+      },
+      async listByRule(uid, ruleId) {
+        const snapshot = await mirrorsCollection(uid)
+          .where("ruleId", "==", ruleId)
+          .get();
+        return snapshot.docs.map((doc) => fromMirrorDoc(doc.id, doc.data()));
+      },
+      async listBySourceCalendar(uid, sourceAccountId, sourceCalendarId) {
+        const snapshot = await mirrorsCollection(uid)
+          .where("sourceAccountId", "==", sourceAccountId)
+          .where("sourceCalendarId", "==", sourceCalendarId)
+          .get();
+        return snapshot.docs.map((doc) => fromMirrorDoc(doc.id, doc.data()));
+      },
+      async listByAccount(uid, accountId) {
+        const [asSource, asTarget] = await Promise.all([
+          mirrorsCollection(uid)
+            .where("sourceAccountId", "==", accountId)
+            .get(),
+          mirrorsCollection(uid)
+            .where("targetAccountId", "==", accountId)
+            .get(),
+        ]);
+        const byId = new Map<string, MirrorRecord>();
+        for (const doc of [...asSource.docs, ...asTarget.docs]) {
+          byId.set(doc.id, fromMirrorDoc(doc.id, doc.data()));
+        }
+        return [...byId.values()];
+      },
+    },
+
+    channels: {
+      async get(channelId) {
+        const snapshot = await channelsCollection.doc(channelId).get();
+        const data = snapshot.data();
+        if (!snapshot.exists || !data) {
+          return undefined;
+        }
+        return {
+          id: snapshot.id,
+          uid: String(data.uid ?? ""),
+          accountId: String(data.accountId ?? ""),
+          calendarId: String(data.calendarId ?? ""),
+          resourceId: String(data.resourceId ?? ""),
+          token: String(data.token ?? ""),
+          expiresAt: toDate(data.expiresAt),
+        };
+      },
+      async upsert(channel) {
+        await channelsCollection.doc(channel.id).set({
+          uid: channel.uid,
+          accountId: channel.accountId,
+          calendarId: channel.calendarId,
+          resourceId: channel.resourceId,
+          token: channel.token,
+          expiresAt: Timestamp.fromDate(channel.expiresAt),
+        });
+      },
+      async delete(channelId) {
+        await channelsCollection.doc(channelId).delete();
       },
     },
 
@@ -196,6 +334,46 @@ function toDate(value: unknown): Date {
     return value;
   }
   return new Date(String(value));
+}
+
+function toDateOrNull(value: unknown): Date | null {
+  return value === null || value === undefined ? null : toDate(value);
+}
+
+function toTimestampOrNull(value: Date | null): Timestamp | null {
+  return value ? Timestamp.fromDate(value) : null;
+}
+
+function fromSyncStateDoc(id: string, data: DocumentData): SyncState {
+  return {
+    id,
+    accountId: String(data.accountId ?? ""),
+    calendarId: String(data.calendarId ?? ""),
+    syncToken: typeof data.syncToken === "string" ? data.syncToken : null,
+    lastFullSyncAt: toDateOrNull(data.lastFullSyncAt),
+    lastIncrementalSyncAt: toDateOrNull(data.lastIncrementalSyncAt),
+    channelId: typeof data.channelId === "string" ? data.channelId : null,
+    resourceId: typeof data.resourceId === "string" ? data.resourceId : null,
+    channelToken:
+      typeof data.channelToken === "string" ? data.channelToken : null,
+    channelExpiresAt: toDateOrNull(data.channelExpiresAt),
+  };
+}
+
+function fromMirrorDoc(id: string, data: DocumentData): MirrorRecord {
+  return {
+    id,
+    ruleId: String(data.ruleId ?? ""),
+    sourceAccountId: String(data.sourceAccountId ?? ""),
+    sourceCalendarId: String(data.sourceCalendarId ?? ""),
+    sourceEventId: String(data.sourceEventId ?? ""),
+    targetAccountId: String(data.targetAccountId ?? ""),
+    targetCalendarId: String(data.targetCalendarId ?? "primary"),
+    targetEventId: String(data.targetEventId ?? ""),
+    kind: (data.kind as OutputKind) ?? "busy",
+    fingerprint: String(data.fingerprint ?? ""),
+    updatedAt: toDate(data.updatedAt),
+  };
 }
 
 function toAccountDoc(account: LinkedAccount): DocumentData {

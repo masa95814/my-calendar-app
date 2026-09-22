@@ -8,12 +8,14 @@ import { logger } from "../lib/logger.js";
 import { validateReturnUrl } from "../lib/url.js";
 import type { AuthEnv } from "../middleware/auth.js";
 import { toPublicAccount, type Stores } from "../repositories/index.js";
+import type { SyncService } from "../services/sync.js";
 
 export type AccountRouteDeps = {
   config: Config;
   google: GoogleOAuth;
   stores: Stores;
   cipher: TokenCipher;
+  sync: SyncService;
   now: () => Date;
   randomState: () => string;
 };
@@ -76,6 +78,11 @@ export function accountRoutes(deps: AccountRouteDeps) {
     if (!account) {
       return c.json({ error: "not_found" }, 404);
     }
+    // トークンが失効する前に、このアカウントが関わるミラー予定を消す
+    const deletedMirrors = await deps.sync.deleteMirrorsForAccount(
+      uid,
+      accountId,
+    );
     // Google 側の許可も取り消す。失敗しても連携情報の削除は進める
     try {
       await deps.google.revokeToken(
@@ -91,7 +98,6 @@ export function accountRoutes(deps: AccountRouteDeps) {
       );
     }
     // このアカウントを使う同期設定は無効化する（削除はしない。再連携すれば有効に戻せる）
-    // TODO(フェーズ 3): このアカウントに作成済みのミラー予定の削除
     const disabledRules = await deps.stores.rules.disableForAccount(
       uid,
       accountId,
@@ -101,6 +107,7 @@ export function accountRoutes(deps: AccountRouteDeps) {
       uid,
       accountId,
       disabledRules,
+      deletedMirrors,
     });
     return c.body(null, 204);
   });

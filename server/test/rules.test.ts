@@ -124,7 +124,9 @@ describe("POST /api/rules", () => {
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
     });
-    expect(rule.lastSyncAt).toBeNull();
+    // 有効な設定は作成時に初回同期が走る
+    expect(new Date(rule.lastSyncAt ?? "")).toEqual(h.clock.now);
+    expect(rule.lastError).toBeNull();
     expect(new Date(rule.createdAt)).toEqual(h.clock.now);
   });
 

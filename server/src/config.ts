@@ -43,6 +43,21 @@ const envSchema = z
     // リフレッシュトークンを Firestore に保存するときの暗号鍵（base64 の 32 バイト）
     // `openssl rand -base64 32` で生成する。本番では必須、開発では省略可（平文保存になる）
     TOKEN_ENCRYPTION_KEY: z.string().min(1).optional(),
+
+    // Cloud Scheduler からの /tasks/* 呼び出しを認証する共有シークレット（X-Tasks-Secret ヘッダー）
+    // 本番では必須。開発で未設定なら認証なしで呼べる
+    TASKS_SECRET: z.string().min(1).optional(),
+
+    // このサービスの公開 URL（例: https://xxx.run.app）。設定すると events.watch の通知先に使う
+    // 未設定ならポーリングだけで同期する（ローカル開発）
+    PUBLIC_BASE_URL: z.string().url().optional(),
+
+    // watch チャネルの有効期間（秒）。Google の上限に合わせて既定は 7 日
+    WATCH_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(7 * 24 * 60 * 60),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production" && !env.TOKEN_ENCRYPTION_KEY) {
@@ -50,6 +65,14 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ["TOKEN_ENCRYPTION_KEY"],
         message: "本番では必須です（openssl rand -base64 32 で生成した値）",
+      });
+    }
+    if (env.NODE_ENV === "production" && !env.TASKS_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["TASKS_SECRET"],
+        message:
+          "本番では必須です（Cloud Scheduler のヘッダーに設定する共有シークレット）",
       });
     }
   });
