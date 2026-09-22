@@ -4,16 +4,16 @@
 /** @type { PrettierConfig | SortImportsConfig } */
 const config = {
   plugins: [
-  // @ianvs/prettier-plugin-sort-imports options
-  // importの順序を指定する
-  // https://github.com/IanVS/prettier-plugin-sort-imports#importorder
+    // @ianvs/prettier-plugin-sort-imports options
+    // importの順序を指定する
+    // https://github.com/IanVS/prettier-plugin-sort-imports#importorder
     "@ianvs/prettier-plugin-sort-imports",
-  // prettier-plugin-tailwindcss options
-  // tailwindの設定ファイルを指定する。デフォルトでは既存プロジェクトのtailwind.config.jsを参照します。
-  // https://github.com/tailwindlabs/prettier-plugin-tailwindcss#customizing-your-tailwind-config-path
+    // prettier-plugin-tailwindcss options
+    // tailwindの設定ファイルを指定する。デフォルトでは既存プロジェクトのtailwind.config.jsを参照します。
+    // https://github.com/tailwindlabs/prettier-plugin-tailwindcss#customizing-your-tailwind-config-path
     "prettier-plugin-tailwindcss",
   ],
-    // @ianvs/prettier-plugin-sort-imports options
+  // @ianvs/prettier-plugin-sort-imports options
   // importの順序を指定する
   // https://github.com/IanVS/prettier-plugin-sort-imports#importorder
   importOrder: [
@@ -47,6 +47,13 @@ const config = {
   tabWidth: 2,
   // https://prettier.io/docs/en/options.html#prose-wrap
   proseWrap: "always", // printWidth line breaks in md/mdx
+  overrides: [
+    {
+      // 日本語のドキュメントは行の途中で折り返すと表示上スペースが入るため、そのまま保持する
+      files: "docs/**/*.md",
+      options: { proseWrap: "preserve" },
+    },
+  ],
 };
 
 export default config;
