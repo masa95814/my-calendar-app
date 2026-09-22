@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Android のテーマアイコン用: 形（透明度）だけが使われる。カレンダーを白で塗り、リングの縁と矢印を抜く -->
+  <defs>
+    <mask id="cut">
+      <rect width="64" height="64" fill="#ffffff"/>
+      <rect x="21" y="10" width="5" height="10" rx="2.5" fill="#000000" stroke="#000000" stroke-width="2"/>
+      <rect x="38" y="10" width="5" height="10" rx="2.5" fill="#000000" stroke="#000000" stroke-width="2"/>
+      <path d="M22.5 37a9.5 9.5 0 0 1 16.5-5.5" fill="none" stroke="#000000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M40 27.5v4.5h-4.5" fill="none" stroke="#000000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M41.5 40a9.5 9.5 0 0 1-16.5 5.5" fill="none" stroke="#000000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M24 49.5V45h4.5" fill="none" stroke="#000000" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g transform="translate(32 32) scale(0.6) translate(-32 -31)">
+    <g mask="url(#cut)">
+      <rect x="12" y="15" width="40" height="37" rx="6" fill="#ffffff"/>
+    </g>
+    <rect x="22" y="11" width="3" height="8" rx="1.5" fill="#ffffff"/>
+    <rect x="39" y="11" width="3" height="8" rx="1.5" fill="#ffffff"/>
+  </g>
+</svg>
