@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Platform } from "react-native";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import {
@@ -17,11 +18,38 @@ import {
 } from "firebase/auth";
 
 import { loginStartUrl } from "../lib/api";
+import { notify } from "../lib/dialog";
 import { describeAuthError } from "../lib/errorMessages";
 import { auth } from "../lib/firebase";
 
-// Web では、リダイレクト先で開いたページがポップアップを閉じて結果を返すために必要
-WebBrowser.maybeCompleteAuthSession();
+const isWeb = Platform.OS === "web";
+
+/**
+ * Web で Google から戻ってきたときの結果（URL のクエリ）を取り出し、URL から消す。
+ * Web はポップアップを使わず同じタブで移動するため、結果はページの読み込み時に受け取る。
+ */
+function consumeWebRedirectResult():
+  | { path: string; params: Record<string, string> }
+  | undefined {
+  if (!isWeb || typeof window === "undefined") {
+    return undefined;
+  }
+  const url = new URL(window.location.href);
+  const keys = ["token", "linked", "error"];
+  if (!keys.some((key) => url.searchParams.has(key))) {
+    return undefined;
+  }
+  const params: Record<string, string> = {};
+  for (const key of keys) {
+    const value = url.searchParams.get(key);
+    if (value !== null) {
+      params[key] = value;
+    }
+  }
+  // トークンを URL に残さない（履歴やブックマークに残らないようにする）
+  window.history.replaceState(null, "", "/");
+  return { path: url.pathname, params };
+}
 
 type AuthState = {
   user: User | null;
@@ -47,6 +75,12 @@ export async function openAuthSession(
   | { kind: "error"; code: string }
   | { kind: "success"; params: Record<string, string> }
 > {
+  if (isWeb) {
+    // Google のログイン画面はポップアップと元の画面のつながりを切る（COOP）ため、
+    // Web ではポップアップを使わず同じタブで移動する。結果は戻ってきたページの読み込み時に受け取る
+    window.location.assign(startUrl);
+    return new Promise(() => {});
+  }
   const result = await WebBrowser.openAuthSessionAsync(startUrl, returnTo);
   if (result.type !== "success") {
     return { kind: "cancelled" };
@@ -75,6 +109,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       setInitializing(false);
     });
+  }, []);
+
+  // Web: Google から戻ってきたページの読み込み時に、ログインまたは連携の結果を処理する
+  useEffect(() => {
+    const result = consumeWebRedirectResult();
+    if (!result) {
+      return;
+    }
+    const { path, params } = result;
+    if (path.startsWith("/accounts")) {
+      if (params.error) {
+        notify("連携できませんでした", describeAuthError(params.error));
+      } else if (params.linked) {
+        notify("連携しました", params.linked);
+      }
+      return;
+    }
+    if (params.error) {
+      setError(describeAuthError(params.error));
+      return;
+    }
+    if (params.token) {
+      setSigningIn(true);
+      signInWithCustomToken(auth, params.token)
+        .catch((caught: unknown) =>
+          setError(
+            caught instanceof Error
+              ? `ログインに失敗しました: ${caught.message}`
+              : "ログインに失敗しました。",
+          ),
+        )
+        .finally(() => setSigningIn(false));
+    }
   }, []);
 
   const signIn = useCallback(async () => {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -29,6 +28,7 @@ import {
   type RuleInput,
   type SyncRule,
 } from "../lib/api";
+import { confirmAction, notify } from "../lib/dialog";
 import {
   ALL_DAY_LABELS,
   AUTO_DECLINE_LABELS,
@@ -241,7 +241,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
           try {
             await api.createRule(reverseRuleInput(payload, accounts));
           } catch (caught) {
-            Alert.alert(
+            notify(
               "逆方向の設定は作成できませんでした",
               describeApiError(caught),
             );
@@ -256,36 +256,35 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
           errors[detail.path ?? mapCodeToPath(detail.code)] = detail.message;
         }
         setFieldErrors(errors);
-        Alert.alert("入力内容を確認してください", describeApiError(caught));
+        notify("入力内容を確認してください", describeApiError(caught));
       } else if (caught instanceof ApiError && caught.status === 409) {
-        Alert.alert(
+        notify(
           "すでに同じ組み合わせの設定があります",
           "同じ送信元と同期先の同期設定は 1 件までです。一覧から既存の設定を編集してください。",
         );
       } else {
-        Alert.alert("保存できませんでした", describeApiError(caught));
+        notify("保存できませんでした", describeApiError(caught));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  function confirmDelete(id: string) {
-    Alert.alert("この同期設定を削除しますか？", "この操作は取り消せません。", [
-      { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除する",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await api.deleteRule(id);
-            navigation.goBack();
-          } catch (caught) {
-            Alert.alert("削除できませんでした", describeApiError(caught));
-          }
-        },
-      },
-    ]);
+  async function confirmDelete(id: string) {
+    const ok = await confirmAction({
+      title: "この同期設定を削除しますか？",
+      message: "この操作は取り消せません。",
+      confirmLabel: "削除する",
+    });
+    if (!ok) {
+      return;
+    }
+    try {
+      await api.deleteRule(id);
+      navigation.goBack();
+    } catch (caught) {
+      notify("削除できませんでした", describeApiError(caught));
+    }
   }
 
   const accountOptions = accounts.map((a) => ({

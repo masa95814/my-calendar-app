@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -22,6 +21,7 @@ import {
   type SyncRule,
 } from "../lib/api";
 import { formatDateTime } from "../lib/dates";
+import { notify } from "../lib/dialog";
 import {
   groupRulesByPair,
   ruleToInput,
@@ -44,10 +44,10 @@ export default function RulesListScreen({ navigation }: Props) {
     setSyncing(true);
     try {
       const { summary } = await api.syncAll();
-      Alert.alert("同期が完了しました", describeSyncSummary(summary));
+      notify("同期が完了しました", describeSyncSummary(summary));
       await load();
     } catch (caught) {
-      Alert.alert("同期できませんでした", describeApiError(caught));
+      notify("同期できませんでした", describeApiError(caught));
     } finally {
       setSyncing(false);
     }
@@ -87,7 +87,7 @@ export default function RulesListScreen({ navigation }: Props) {
       setRules((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
     } catch (caught) {
       setRules((prev) => prev.map((r) => (r.id === rule.id ? rule : r)));
-      Alert.alert("変更できませんでした", describeApiError(caught));
+      notify("変更できませんでした", describeApiError(caught));
     }
   };
 

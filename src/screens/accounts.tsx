@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -13,6 +12,7 @@ import * as Linking from "expo-linking";
 
 import { openAuthSession } from "../auth/AuthProvider";
 import { api, describeApiError, type LinkedAccount } from "../lib/api";
+import { confirmAction, notify } from "../lib/dialog";
 import { describeAuthError } from "../lib/errorMessages";
 
 export default function AccountsScreen() {
@@ -46,38 +46,33 @@ export default function AccountsScreen() {
       const { url } = await api.startLink(returnTo);
       const result = await openAuthSession(url, returnTo);
       if (result.kind === "error") {
-        Alert.alert("連携できませんでした", describeAuthError(result.code));
+        notify("連携できませんでした", describeAuthError(result.code));
       } else if (result.kind === "success") {
         await load();
-        Alert.alert("連携しました", result.params.linked ?? "");
+        notify("連携しました", result.params.linked ?? "");
       }
     } catch (caught) {
-      Alert.alert("連携できませんでした", describeApiError(caught));
+      notify("連携できませんでした", describeApiError(caught));
     } finally {
       setLinking(false);
     }
   };
 
-  const confirmUnlink = (account: LinkedAccount) => {
-    Alert.alert(
-      "連携を解除しますか？",
-      `${account.email} のカレンダーへのアクセス権を取り消します。`,
-      [
-        { text: "キャンセル", style: "cancel" },
-        {
-          text: "解除する",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.unlinkAccount(account.id);
-              await load();
-            } catch (caught) {
-              Alert.alert("解除できませんでした", describeApiError(caught));
-            }
-          },
-        },
-      ],
-    );
+  const confirmUnlink = async (account: LinkedAccount) => {
+    const ok = await confirmAction({
+      title: "連携を解除しますか？",
+      message: `${account.email} のカレンダーへのアクセス権を取り消します。このアカウントに作成したミラー予定も削除し、関わる同期設定は無効になります。`,
+      confirmLabel: "解除する",
+    });
+    if (!ok) {
+      return;
+    }
+    try {
+      await api.unlinkAccount(account.id);
+      await load();
+    } catch (caught) {
+      notify("解除できませんでした", describeApiError(caught));
+    }
   };
 
   if (loading) {
