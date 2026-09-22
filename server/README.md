@@ -139,13 +139,9 @@ npm run typecheck
 ## デプロイ（Cloud Run）
 
 ```bash
-gcloud run deploy my-calendar-app-server \
-  --source . \
-  --region asia-northeast1 \
-  --set-env-vars OWNER_EMAILS=you@example.com,GOOGLE_OAUTH_CLIENT_ID=...,OAUTH_REDIRECT_URI=https://<サービスの URL>/auth/google/callback \
-  --set-secrets GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest
+cd server
+./scripts/deploy.sh
 ```
 
-`GOOGLE_CLOUD_PROJECT` は Cloud Run が自動で設定します。
-シークレット（OAuth のクライアントシークレット、トークン暗号鍵）は Secret Manager に登録し、`--set-secrets` で注入します。
-デプロイ後、Google Cloud コンソールの OAuth クライアントの「承認済みのリダイレクト URI」にサービスの URL を追加してください。
+API の有効化、シークレットの登録、権限付与、Cloud Run へのデプロイ、Firestore ルールの適用、Cloud Scheduler のジョブ作成までを行います。
+詳しい手順とデプロイ後の手動作業は [docs/deploy.md](../docs/deploy.md) を参照してください。
