@@ -1,50 +1,58 @@
-# Welcome to your Expo app 👋
+# my-calendar-app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+複数の Google アカウント（Google Workspace と個人）のカレンダーを連携し、あるアカウントの予定を、他のアカウントのカレンダーに「不在」または「予定あり」として自動で反映するアプリです。
 
-## Get started
+- 要件と設計: [docs/requirements-and-design.md](docs/requirements-and-design.md)
+- 本番デプロイ: [docs/deploy.md](docs/deploy.md)
+- バックエンド: [server/README.md](server/README.md)
 
-1. Install dependencies
+## 構成
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+index.ts                 アプリのエントリーポイント（registerRootComponent）
+app.json                 Expo の設定
+src/
+  App.tsx                アプリのルート（ログイン状態と画面遷移の組み立て）
+  navigation/            画面遷移（タブ、同期設定のスタック）と画面パラメータの型
+  screens/               画面（ログイン、カレンダー、同期設定の一覧と編集、アカウント、設定）
+  components/            画面で共通の部品（フォームの入力部品など）
+  auth/                  ログイン状態の管理と、ブラウザでの認証の共通処理
+  lib/                   API クライアント、Firebase、日付・色・同期設定の補助関数
+  config/                公開設定（EXPO_PUBLIC_* の環境変数）
+  assets/images/         アイコン、スプラッシュ画面、ファビコン
+server/                  バックエンド（Cloud Run / Node.js 22 + TypeScript）
+docs/                    要件・設計、デプロイ手順
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## ローカルで動かす
 
-## Learn more
+```bash
+npm install
+cp .env.example .env    # 接続先を設定する（EXPO_PUBLIC_* はビルドに埋め込まれる公開情報のみ）
+npx expo start --web    # Web 版（http://localhost:8081）
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+`.env` の接続先:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **本番**: `EXPO_PUBLIC_API_BASE_URL` に Cloud Run の URL、Firebase の値に本番のウェブアプリ設定、`EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` は空
+- **ローカル開発**: `.env.example` のとおり。`server/` のバックエンドと Firebase エミュレータを先に起動する（[server/README.md](server/README.md)）
 
-## Join the community
+スマホで動かす場合の注意:
 
-Join our community of developers creating universal apps.
+- iOS シミュレータと Web は `localhost` でローカルのバックエンドに届く
+- Android エミュレータは `adb reverse tcp:8080 tcp:8080`（Auth エミュレータを使うなら `tcp:9099` も）が必要
+- 実機は Google の OAuth の戻り先が端末自身の `localhost` になるため、本番（Cloud Run）に接続して使う
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## チェック
+
+```bash
+npm run typecheck   # 型チェック
+npm run lint        # ESLint
+npm run format      # Prettier（整形は npm run format:fix）
+cd server && npm test && npm run typecheck
+```
+
+## 開発の進め方
+
+- 変更は必ずブランチを切り、`develop` への Pull Request にする
+- `main` は本番稼働時にだけ `develop` からマージする

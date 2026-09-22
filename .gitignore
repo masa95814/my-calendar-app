@@ -31,16 +31,18 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
 
-app-example
 
 # generated native folders
 /ios
 /android
 
-# Unnecessary
-/app-example
+
+# iCloud Drive が同期の衝突時に作る複製（例: api 2.ts）。誤ってコミットしないように除外する
+* 2.*
+* 2
