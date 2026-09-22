@@ -66,8 +66,9 @@ curl http://localhost:8080/healthz
 ### Firebase の認証情報
 
 - ローカルで本物の Firebase を使う場合: `gcloud auth application-default login` を実行しておく
-- エミュレータを使う場合: `npx firebase emulators:start`（要 firebase-tools と Java）を起動し、
-  `.env` の `FIRESTORE_EMULATOR_HOST` と `FIREBASE_AUTH_EMULATOR_HOST` のコメントを外す
+- エミュレータを使う場合: `npx firebase-tools@latest emulators:start --only auth,firestore --project <プロジェクト ID>`（要 Java）を起動し、
+  `.env` の `FIRESTORE_EMULATOR_HOST`（127.0.0.1:8090）と `FIREBASE_AUTH_EMULATOR_HOST`（127.0.0.1:9099）のコメントを外す。
+  エミュレータの UI は `http://localhost:4000`
 
 `/healthz` だけなら認証情報なしで起動できます。
 
