@@ -4,7 +4,6 @@ import type { Config } from "../config.js";
 import type { TokenCipher } from "../lib/crypto.js";
 import {
   hasCalendarScopes,
-  LINK_SCOPES,
   LOGIN_SCOPES,
   type GoogleIdentity,
   type GoogleOAuth,

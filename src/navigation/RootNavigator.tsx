@@ -1,20 +1,17 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { registerRootComponent } from "expo";
-import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import { AuthProvider, useAuth } from "../auth/AuthProvider";
-import type { RulesStackParamList, TabParamList } from "../navigation/types";
-import AccountsScreen from "./accounts";
-import CalendarScreen from "./calendar";
-import LoginScreen from "./login";
-import RuleEditorScreen from "./ruleEditor";
-import RulesListScreen from "./rules";
-import SettingsScreen from "./settings";
+import { useAuth } from "../auth/AuthProvider";
+import AccountsScreen from "../screens/accounts";
+import CalendarScreen from "../screens/calendar";
+import LoginScreen from "../screens/login";
+import RuleEditorScreen from "../screens/ruleEditor";
+import RulesListScreen from "../screens/rules";
+import SettingsScreen from "../screens/settings";
+import type { RulesStackParamList, TabParamList } from "./types";
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const RulesStack = createNativeStackNavigator<RulesStackParamList>();
@@ -98,7 +95,8 @@ function MainTabs() {
   );
 }
 
-function Root() {
+/** ログイン状態に応じて、ログイン画面かメインのタブを出す */
+export default function RootNavigator() {
   const { user, initializing } = useAuth();
   if (initializing) {
     return (
@@ -110,17 +108,6 @@ function Root() {
   return user ? <MainTabs /> : <LoginScreen />;
 }
 
-const App = () => {
-  return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <Root />
-      </AuthProvider>
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
-  );
-};
-
 const styles = StyleSheet.create({
   center: {
     flex: 1,
@@ -129,5 +116,3 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F9FA",
   },
 });
-
-registerRootComponent(App);

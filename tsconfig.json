@@ -4,8 +4,10 @@
     "strict": true,
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "app-example", "server"]
+  "exclude": ["node_modules", "server"]
 }
