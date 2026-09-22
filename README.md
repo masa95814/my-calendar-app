@@ -56,3 +56,4 @@ cd server && npm test && npm run typecheck
 
 - 変更は必ずブランチを切り、`develop` への Pull Request にする
 - `main` は本番稼働時にだけ `develop` からマージする
+- Pull Request では CI（型チェック、ESLint、Prettier、テスト、Web ビルド）が自動で走る。`main` へのマージで本番に自動で反映される（[docs/deploy.md](docs/deploy.md)）
