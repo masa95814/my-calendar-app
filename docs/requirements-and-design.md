@@ -165,13 +165,24 @@ flowchart LR
 | Secret Manager                    | OAuth クライアントシークレット                                      |
 | Firebase Authentication           | アプリ利用者のログイン（Google サインイン）                         |
 
-### 6.2 アカウント連携の流れ
+### 6.2 ログインとアカウント連携の流れ
 
-1. アプリで「Google アカウントを追加」を押すと、バックエンドの `/auth/google/start` をブラウザで開く
-2. バックエンドが Google の同意画面へリダイレクトする（`access_type=offline`、`prompt=consent`）
-3. 同意後、`/auth/google/callback` で認可コードをトークンに交換し、リフレッシュトークンと `hd` の有無を Firestore に保存する
-4. アプリのディープリンク（`mycalendarapp://linked`）へ戻す。アプリはアカウント一覧を再取得する
+ログインも連携も、ブラウザで Google の同意画面を開いてバックエンドのコールバックに戻る方式にする。
+iOS / Android 用の OAuth クライアントを作らずに、ウェブ用クライアント 1 つで済ませるため。
 
+#### ログイン（アプリ利用者の本人確認）
+
+1. アプリが `/auth/login/start?return_to=<アプリの URL>` をブラウザで開く。`return_to` は許可した先頭文字列（`mycalendarapp://`、`exp://`、`http://localhost`）のものだけ受け付ける
+2. Google でアカウントを選ぶと `/auth/google/callback` に戻る。バックエンドはメールアドレスを `OWNER_EMAILS` と照合し、本人なら Firebase のカスタムトークンを発行する
+3. `return_to?token=<カスタムトークン>` にリダイレクトし、アプリは `signInWithCustomToken` でログインする。以降の API 呼び出しには Firebase の ID トークンを付ける
+
+#### アカウント連携
+
+1. アプリが認証付きで `POST /api/accounts/link` を呼び、返された同意画面の URL をブラウザで開く（`access_type=offline`、`prompt=consent`）
+2. 連携したいアカウントで許可すると `/auth/google/callback` に戻る。バックエンドは認可コードをトークンに交換し、リフレッシュトークンを暗号化して Firestore に保存、`hd` の有無で Workspace / 個人を判定し、カレンダー一覧を取得する
+3. `return_to?linked=<email>` にリダイレクトする。アプリはアカウント一覧を再取得する
+
+CSRF 対策として、開始時に発行した `state` を Firestore に保存し、コールバックで 1 回だけ消費する（有効期間 10 分）。
 トークンをアプリ側で扱わないため、Expo Go でも動作し、スマホにトークンが残らない。
 
 ### 6.3 データモデル（Firestore）
