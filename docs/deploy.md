@@ -6,10 +6,11 @@
 ## 1. 事前準備（初回のみ）
 
 ```bash
-brew install --cask gcloud-cli
+curl https://sdk.cloud.google.com | bash   # Homebrew が使えない場合もこちらで入る
 gcloud auth login
-npx firebase-tools@latest login
 ```
+
+Apple シリコンの Mac では、gcloud 用に Python 3.10 以上を `CLOUDSDK_PYTHON` で指定する必要があります（システムの Python が 3.9 以下の場合）。
 
 `server/.env` に次の値が入っていることを確認します（ローカル開発で使っているものと同じ）。
 
@@ -30,11 +31,11 @@ cd server
 
 スクリプトが行うこと:
 
-1. 必要な API の有効化（Cloud Run、Cloud Build、Secret Manager、Cloud Scheduler、Calendar、Firestore など）
+1. 必要な API の有効化（Cloud Run、Cloud Build、Secret Manager、Cloud Scheduler、Calendar、Firestore、Firebase など）。請求先アカウントのリンクが事前に必要
 2. シークレット 3 つ（OAuth クライアントシークレット、トークン暗号鍵、タスク用シークレット）を Secret Manager に登録。値が変わったときだけ新しいバージョンを追加
 3. Cloud Run の実行サービスアカウントに権限を付与（シークレットの読み取り、Firestore、Firebase Auth、カスタムトークンの署名）
 4. Cloud Run にデプロイ。初回は URL が決まってから、その URL を `PUBLIC_BASE_URL` と `OAUTH_REDIRECT_URI` に設定して再デプロイ
-5. Firestore のセキュリティルール（クライアントからの直接アクセスをすべて禁止）を適用
+5. Firebase の初期設定: Firebase の追加、Firestore データベースの作成、Firebase Authentication の有効化、セキュリティルール（クライアントからの直接アクセスをすべて禁止）の適用、アプリ用ウェブアプリの登録
 6. Cloud Scheduler のジョブ 3 つを作成・更新
 
 | ジョブ                 | 間隔      | 内容                                         |
@@ -48,7 +49,7 @@ cd server
 1. **リダイレクト URI の追加**: Google Cloud コンソール → Google Auth Platform → クライアント → ウェブ用クライアント の「承認済みのリダイレクト URI」に、スクリプトの最後に表示される `https://.../auth/google/callback` を追加
 2. **アプリの接続先を本番に**: ルートの `.env` を次のように変更
    - `EXPO_PUBLIC_API_BASE_URL` にサービスの URL
-   - `EXPO_PUBLIC_FIREBASE_API_KEY` と `EXPO_PUBLIC_FIREBASE_APP_ID` に Firebase コンソールのウェブアプリ設定の値
+   - `EXPO_PUBLIC_FIREBASE_API_KEY` などの Firebase の値（スクリプトの最後に表示される）
    - `EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` を空にする
 3. **ログインと連携のやり直し**: エミュレータのデータは本番に移らないので、アプリでログインし、Google アカウントを連携し直して同期設定を作る
 4. **watch チャネルの登録**: 同期設定を作ったら一度だけ手動で実行（以降は毎日自動）
@@ -65,3 +66,11 @@ cd server
 - **手動で同期**: アプリの設定タブの「今すぐ同期」、または `gcloud scheduler jobs run calendar-poll --location asia-northeast1`
 - **再デプロイ**: `cd server && ./scripts/deploy.sh`
 - **費用**: 個人利用の規模（10 分ごとの同期、4 アカウント程度）なら Cloud Run・Firestore・Scheduler とも無料枠に収まる想定。Cloud Scheduler は 3 ジョブまで無料
+
+## トラブルシューティング
+
+| 症状                                                      | 原因と対処                                                                                                          |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Billing account ... is not found`                        | プロジェクトに請求先アカウントがリンクされていない。`gcloud billing projects link <PROJECT> --billing-account=<ID>` |
+| ビルドで `PERMISSION_DENIED ... could not resolve source` | 実行サービスアカウントに `roles/cloudbuild.builds.builder` が無い（スクリプトで付与済み）                           |
+| `/healthz` が Google の 404 ページになる                  | Cloud Run は末尾が z のパスを予約している。`/health` を使う                                                         |
