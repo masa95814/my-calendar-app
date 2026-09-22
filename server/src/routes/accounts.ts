@@ -90,9 +90,18 @@ export function accountRoutes(deps: AccountRouteDeps) {
         },
       );
     }
-    // TODO(フェーズ 2〜3): このアカウントを使う同期設定の無効化とミラー予定の削除
+    // このアカウントを使う同期設定は無効化する（削除はしない。再連携すれば有効に戻せる）
+    // TODO(フェーズ 3): このアカウントに作成済みのミラー予定の削除
+    const disabledRules = await deps.stores.rules.disableForAccount(
+      uid,
+      accountId,
+    );
     await deps.stores.accounts.delete(uid, accountId);
-    logger.info("Google アカウントの連携を解除しました", { uid, accountId });
+    logger.info("Google アカウントの連携を解除しました", {
+      uid,
+      accountId,
+      disabledRules,
+    });
     return c.body(null, 204);
   });
 

@@ -1,3 +1,4 @@
+import type { SyncRule } from "../domain/rules.js";
 import type { CalendarSummary } from "../lib/google.js";
 
 // Firestore への永続化を抽象化したインターフェース。
@@ -62,8 +63,25 @@ export interface UserStore {
   recordLogin(uid: string, email: string, at: Date): Promise<void>;
 }
 
+export interface RuleStore {
+  list(uid: string): Promise<SyncRule[]>;
+  get(uid: string, ruleId: string): Promise<SyncRule | undefined>;
+  /** 同じ送信元・同期先の組み合わせの同期設定を探す（重複防止） */
+  findBySourceTarget(
+    uid: string,
+    sourceAccountId: string,
+    targetAccountId: string,
+  ): Promise<SyncRule | undefined>;
+  create(uid: string, rule: SyncRule): Promise<void>;
+  update(uid: string, rule: SyncRule): Promise<void>;
+  delete(uid: string, ruleId: string): Promise<void>;
+  /** アカウント連携解除時に、そのアカウントを使う同期設定を無効化する。無効化した件数を返す */
+  disableForAccount(uid: string, accountId: string): Promise<number>;
+}
+
 export type Stores = {
   oauthStates: OAuthStateStore;
   accounts: AccountStore;
   users: UserStore;
+  rules: RuleStore;
 };
