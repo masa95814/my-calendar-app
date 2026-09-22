@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 
 import type { Config } from "./config.js";
@@ -74,6 +75,22 @@ export function createApp(deps: AppDependencies) {
 
   // 認証必須（許可されたメールアドレスのみ）
   const api = new Hono<AuthEnv>();
+  // Web 版アプリ（ブラウザ）から呼べるようにする。認証は Authorization ヘッダーで行うので Cookie は使わない。
+  // プリフライト（OPTIONS）は認証より前に応答する必要があるため、認証ミドルウェアより先に置く
+  const allowedOrigins = new Set(deps.config.WEB_ALLOWED_ORIGINS);
+  api.use(
+    "*",
+    cors({
+      origin: (origin) =>
+        allowedOrigins.has(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+          ? origin
+          : null,
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Authorization", "Content-Type"],
+      maxAge: 600,
+    }),
+  );
   api.use(
     "*",
     requireOwner({

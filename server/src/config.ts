@@ -37,6 +37,10 @@ const envSchema = z
       .default("mycalendarapp://,exp://,http://localhost")
       .transform(commaSeparatedList),
 
+    // ブラウザ（Web 版アプリ）から /api を呼ぶことを許可するオリジン（カンマ区切り、完全一致）
+    // localhost と 127.0.0.1 はポートを問わず常に許可する（開発用の Web 版）
+    WEB_ALLOWED_ORIGINS: z.string().default("").transform(commaSeparatedList),
+
     // OAuth の state（CSRF 対策の一時トークン）の有効期間
     OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
 
