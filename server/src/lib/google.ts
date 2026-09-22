@@ -83,7 +83,8 @@ export function createGoogleOAuth(options: GoogleOAuthOptions): GoogleOAuth {
         // offline のときは consent を強制しないと 2 回目以降にリフレッシュトークンが返らない
         // ログインのときは 4 アカウントから選べるようにアカウント選択画面を出す
         prompt: params.offline ? "consent" : "select_account",
-        include_granted_scopes: true,
+        // include_granted_scopes（以前に許可した権限の引き継ぎ）は付けない。OAuth 同意画面を「テスト」から
+        // 「本番」に切り替えたあと、Workspace アカウントで Google の同意画面が 500 になったため（2026-09-23）
         ...(params.loginHint ? { login_hint: params.loginHint } : {}),
       });
     },
