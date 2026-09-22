@@ -1,0 +1,73 @@
+# main へのマージで本番に自動反映する（バックエンド → Web 版アプリ → ホームページ）
+# Google Cloud へは Workload Identity 連携で認証する。鍵ファイルや秘密情報は GitHub に置かない。
+# 受け付けるのはこのリポジトリの main ブランチからの実行だけ（Google Cloud 側の条件で制限）。
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: 本番へ反映
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # 環境変数とシークレットは Cloud Run 側の設定を引き継ぐ（変えるときは server/scripts/deploy.sh を手元で実行）
+      - name: バックエンドを Cloud Run に配置
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --source server \
+            --region "${{ vars.GCP_REGION }}" \
+            --quiet
+          URL="$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" --region "${{ vars.GCP_REGION }}" --format='value(status.url)')"
+          curl -sf "$URL/health" > /dev/null && echo "ヘルスチェック: OK ($URL)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Web 版アプリをビルド
+        run: |
+          npm ci
+          npx expo export --platform web --output-dir dist
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN:
+            ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID:
+            ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+          EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: ""
+
+      - name: Web 版アプリを公開
+        run:
+          SITE="${{ vars.GCP_PROJECT_ID }}-app" PUBLIC_DIR="$PWD/dist" SPA=1
+          SKIP_ENABLE=1 ./hosting/deploy.sh "${{ vars.GCP_PROJECT_ID }}"
+
+      - name: ホームページとプライバシーポリシーを公開
+        run: SKIP_ENABLE=1 ./hosting/deploy.sh "${{ vars.GCP_PROJECT_ID }}"
