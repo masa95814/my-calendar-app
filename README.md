@@ -29,6 +29,14 @@ You can start developing by editing the files inside the **src/screens**
 directory. The app entry point is `src/screens/app.tsx` (see `main` in
 `package.json`).
 
+## Project layout
+
+- Root: Expo app (iOS / Android / Web)
+- [server/](server/): backend for Cloud Run (Node.js 22 + TypeScript). See
+  [server/README.md](server/README.md)
+- [docs/](docs/): requirements and design
+  ([docs/requirements-and-design.md](docs/requirements-and-design.md))
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following
