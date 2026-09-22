@@ -1,22 +1,25 @@
-import { registerRootComponent } from 'expo';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { registerRootComponent } from "expo";
+import { StatusBar } from "expo-status-bar";
+
+import CalendarComponent from "./calendar";
 
 const App = () => {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <CalendarComponent />
+      </SafeAreaView>
       <StatusBar style="auto" />
-    </View>
+    </SafeAreaProvider>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F8F9FA",
   },
 });
 
