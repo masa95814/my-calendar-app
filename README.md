@@ -29,6 +29,22 @@ You can start developing by editing the files inside the **src/screens**
 directory. The app entry point is `src/screens/app.tsx` (see `main` in
 `package.json`).
 
+## Configuration
+
+Copy `.env.example` to `.env` and fill in the values (`EXPO_PUBLIC_*` variables
+are public and get embedded in the build; never put secrets there). The app
+signs in through the backend in `server/`, so start the backend first (see
+[server/README.md](server/README.md)).
+
+Local development targets:
+
+- iOS Simulator and Web: `localhost` works for both the backend and the
+  Firebase emulators
+- Android Emulator: run `adb reverse tcp:8080 tcp:8080` (and `tcp:9099` for the
+  Auth emulator) so `localhost` reaches your machine
+- Physical device: the Google OAuth redirect goes to `localhost:8080` on the
+  device itself, so use a deployed backend (Cloud Run) instead
+
 ## Project layout
 
 - Root: Expo app (iOS / Android / Web)
