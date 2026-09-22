@@ -14,7 +14,8 @@ export const autoDeclineModeSchema = z.enum([
 ]);
 
 export const allDaySourceHandlingSchema = z.enum(["fullDay", "skip"]);
-export const visibilitySchema = z.enum(["private", "default"]);
+/** ミラー予定の公開設定（Google Calendar の visibility）。default は同期先カレンダーの既定に従う */
+export const visibilitySchema = z.enum(["public", "private", "default"]);
 
 const keywordList = z
   .array(z.string().trim().min(1).max(100))
@@ -47,7 +48,7 @@ export const ruleOutputSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   copyDescription: z.boolean().default(false),
   copyLocation: z.boolean().default(false),
-  visibility: visibilitySchema.default("private"),
+  visibility: visibilitySchema.default("public"),
   /** 終日の元予定を 0:00〜24:00 の時間指定に変換するか、同期しないか */
   allDaySourceHandling: allDaySourceHandlingSchema.default("fullDay"),
   /** 不在のみ有効 */

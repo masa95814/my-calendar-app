@@ -27,7 +27,8 @@ export const ALL_DAY_LABELS: Record<AllDaySourceHandling, string> = {
 };
 
 export const VISIBILITY_LABELS: Record<Visibility, string> = {
-  private: "限定公開",
+  public: "公開",
+  private: "非公開",
   default: "カレンダーの既定",
 };
 
@@ -76,7 +77,7 @@ export function defaultRuleInput(
       title: OUTPUT_KIND_LABELS[kind],
       copyDescription: false,
       copyLocation: false,
-      visibility: "private",
+      visibility: "public",
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: DEFAULT_DECLINE_MESSAGE,

@@ -81,7 +81,9 @@ export function buildMirrorEvent(
     ...(rule.output.copyLocation && event.location
       ? { location: event.location }
       : {}),
-    ...(rule.output.visibility === "private" ? { visibility: "private" } : {}),
+    ...(rule.output.visibility !== "default"
+      ? { visibility: rule.output.visibility }
+      : {}),
     // ミラー予定で通知が鳴らないようにする
     reminders: { useDefault: false, overrides: [] },
     extendedProperties: {
