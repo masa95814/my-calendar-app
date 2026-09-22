@@ -1,11 +1,21 @@
 import { appEnv } from "../config/env";
 import { auth } from "./firebase";
 
+/** バックエンドが返す検証エラーの明細（`details`） */
+export type ApiErrorDetail = {
+  code: string;
+  message: string;
+  /** 形式エラーのとき、対象フィールドのパス（例: "output.kind"） */
+  path?: string;
+};
+
 /** バックエンドが返すエラー。code はレスポンスの error フィールド */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    readonly details: ApiErrorDetail[] = [],
+    readonly extra: Record<string, unknown> = {},
   ) {
     super(`API error ${status}: ${code}`);
     this.name = "ApiError";
@@ -33,6 +43,58 @@ export type LinkedAccount = {
   updatedAt: string;
 };
 
+// 同期設定（server/src/domain/rules.ts と同じ形）
+export type OutputKind = "outOfOffice" | "busy";
+export type AutoDeclineMode =
+  | "declineNone"
+  | "declineOnlyNewConflictingInvitations"
+  | "declineAllConflictingInvitations";
+export type AllDaySourceHandling = "fullDay" | "skip";
+export type Visibility = "private" | "default";
+
+export type RuleFilters = {
+  minAttendees: number | null;
+  requireMeetLink: boolean;
+  excludeKeywords: string[];
+  includeKeywords: string[];
+  excludeAllDay: boolean;
+  excludeTransparent: boolean;
+  excludeDeclined: boolean;
+  includeTentative: boolean;
+};
+
+export type RuleOutput = {
+  kind: OutputKind;
+  title: string;
+  copyDescription: boolean;
+  copyLocation: boolean;
+  visibility: Visibility;
+  allDaySourceHandling: AllDaySourceHandling;
+  autoDeclineMode: AutoDeclineMode;
+  declineMessage: string;
+};
+
+/** 作成・更新時に送る形 */
+export type RuleInput = {
+  name?: string;
+  enabled: boolean;
+  source: { accountId: string; calendarIds: string[] };
+  target: { accountId: string };
+  windowDays: number;
+  filters: RuleFilters;
+  output: RuleOutput;
+};
+
+/** 保存済みの同期設定 */
+export type SyncRule = Omit<RuleInput, "name"> & {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncAt: string | null;
+  lastError: string | null;
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = auth.currentUser;
   if (!user) {
@@ -52,9 +114,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   const body = (await response.json().catch(() => ({}))) as {
     error?: string;
+    details?: ApiErrorDetail[];
+    [key: string]: unknown;
   };
   if (!response.ok) {
-    throw new ApiError(response.status, body.error ?? "unknown_error");
+    const { error, details, ...extra } = body;
+    throw new ApiError(
+      response.status,
+      error ?? "unknown_error",
+      Array.isArray(details) ? details : [],
+      extra,
+    );
   }
   return body as T;
 }
@@ -75,9 +145,48 @@ export const api = {
     request<void>(`/api/accounts/${encodeURIComponent(accountId)}`, {
       method: "DELETE",
     }),
+
+  listRules: () => request<{ rules: SyncRule[] }>("/api/rules"),
+
+  createRule: (input: RuleInput) =>
+    request<{ rule: SyncRule }>("/api/rules", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  updateRule: (ruleId: string, input: RuleInput) =>
+    request<{ rule: SyncRule }>(`/api/rules/${encodeURIComponent(ruleId)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+
+  deleteRule: (ruleId: string) =>
+    request<void>(`/api/rules/${encodeURIComponent(ruleId)}`, {
+      method: "DELETE",
+    }),
 };
 
 /** ログイン開始 URL（認証不要。ブラウザで開く） */
 export function loginStartUrl(returnTo: string): string {
   return `${appEnv.apiBaseUrl}/auth/login/start?return_to=${encodeURIComponent(returnTo)}`;
+}
+
+/** API エラーを利用者向けの文言にする */
+export function describeApiError(caught: unknown): string {
+  if (caught instanceof ApiError) {
+    if (caught.status === 401) {
+      return "ログインの有効期限が切れました。ログインし直してください。";
+    }
+    if (caught.status === 403) {
+      return "このアカウントはこのアプリの利用を許可されていません。";
+    }
+    if (caught.details.length > 0) {
+      return caught.details.map((d) => d.message).join("\n");
+    }
+    return `サーバーエラー（${caught.status}: ${caught.code}）`;
+  }
+  if (caught instanceof Error) {
+    return `サーバーに接続できません: ${caught.message}`;
+  }
+  return "不明なエラーが発生しました。";
 }

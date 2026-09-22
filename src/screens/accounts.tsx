@@ -12,7 +12,7 @@ import {
 import * as Linking from "expo-linking";
 
 import { openAuthSession, useAuth } from "../auth/AuthProvider";
-import { api, ApiError, type LinkedAccount } from "../lib/api";
+import { api, describeApiError, type LinkedAccount } from "../lib/api";
 import { describeAuthError } from "../lib/errorMessages";
 
 export default function AccountsScreen() {
@@ -189,22 +189,6 @@ function AccountRow({
       </Pressable>
     </View>
   );
-}
-
-function describeApiError(caught: unknown): string {
-  if (caught instanceof ApiError) {
-    if (caught.status === 401) {
-      return "ログインの有効期限が切れました。ログインし直してください。";
-    }
-    if (caught.status === 403) {
-      return "このアカウントはこのアプリの利用を許可されていません。";
-    }
-    return `サーバーエラー（${caught.status}: ${caught.code}）`;
-  }
-  if (caught instanceof Error) {
-    return `サーバーに接続できません: ${caught.message}`;
-  }
-  return "不明なエラーが発生しました。";
 }
 
 const styles = StyleSheet.create({
