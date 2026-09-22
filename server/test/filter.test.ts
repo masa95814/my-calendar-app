@@ -199,12 +199,34 @@ describe("evaluateEvent", () => {
         withFilters({ excludeKeywords: ["仮"] }),
       ),
     ).toBe("exclude_keyword");
+    // 除外キーワードはタイトルだけを見る（説明文の会議リンクなどでは除外しない）
+    expect(
+      reason(
+        event({
+          description:
+            "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x@thread.v2",
+        }),
+        withFilters({ excludeKeywords: ["@"] }),
+      ),
+    ).toBe("mirror");
+    expect(
+      reason(
+        event({ summary: "@自宅", description: "" }),
+        withFilters({ excludeKeywords: ["@"] }),
+      ),
+    ).toBe("exclude_keyword");
+    expect(
+      reason(
+        event({ summary: "Zoom 定例" }),
+        withFilters({ excludeKeywords: ["zoom"] }),
+      ),
+    ).toBe("exclude_keyword");
     expect(
       reason(
         event({ description: "Zoom で実施" }),
         withFilters({ excludeKeywords: ["zoom"] }),
       ),
-    ).toBe("exclude_keyword");
+    ).toBe("mirror");
     expect(reason(event(), withFilters({ includeKeywords: ["顧客"] }))).toBe(
       "include_keyword",
     );
