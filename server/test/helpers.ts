@@ -1,5 +1,6 @@
 import { createApp, type AppDependencies } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import type { SyncRule } from "../src/domain/rules.js";
 import { createTokenCipher } from "../src/lib/crypto.js";
 import type {
   CalendarSummary,
@@ -41,6 +42,7 @@ export const ownerHeaders = { Authorization: "Bearer owner-token" };
 export type MemoryStores = Stores & {
   states: Map<string, OAuthState>;
   accounts: Stores["accounts"] & { data: Map<string, LinkedAccount> };
+  rules: Stores["rules"] & { data: Map<string, SyncRule> };
   logins: { uid: string; email: string; at: Date }[];
 };
 
@@ -48,12 +50,56 @@ export type MemoryStores = Stores & {
 export function createMemoryStores(): MemoryStores {
   const states = new Map<string, OAuthState>();
   const accountsData = new Map<string, LinkedAccount>();
+  const rulesData = new Map<string, SyncRule>();
   const logins: MemoryStores["logins"] = [];
   const key = (uid: string, id: string) => `${uid}/${id}`;
+  const rulesOf = (uid: string) =>
+    [...rulesData.entries()]
+      .filter(([k]) => k.startsWith(`${uid}/`))
+      .map(([, v]) => v)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   return {
     states,
     logins,
+    rules: {
+      data: rulesData,
+      async list(uid) {
+        return rulesOf(uid);
+      },
+      async get(uid, id) {
+        return rulesData.get(key(uid, id));
+      },
+      async findBySourceTarget(uid, sourceAccountId, targetAccountId) {
+        return rulesOf(uid).find(
+          (r) =>
+            r.source.accountId === sourceAccountId &&
+            r.target.accountId === targetAccountId,
+        );
+      },
+      async create(uid, rule) {
+        rulesData.set(key(uid, rule.id), rule);
+      },
+      async update(uid, rule) {
+        rulesData.set(key(uid, rule.id), rule);
+      },
+      async delete(uid, id) {
+        rulesData.delete(key(uid, id));
+      },
+      async disableForAccount(uid, accountId) {
+        let count = 0;
+        for (const rule of rulesOf(uid)) {
+          if (
+            rule.source.accountId === accountId ||
+            rule.target.accountId === accountId
+          ) {
+            rulesData.set(key(uid, rule.id), { ...rule, enabled: false });
+            count++;
+          }
+        }
+        return count;
+      },
+    },
     oauthStates: {
       async create(state) {
         states.set(state.state, state);

@@ -34,7 +34,12 @@ test/                       vitest によるテスト（Firebase / Google は偽
 | GET      | `/api/me`                      | 必要 | ログイン確認                                                                                                                    |
 | GET      | `/api/accounts`                | 必要 | 連携アカウント一覧（トークンは含まない）                                                                                        |
 | POST     | `/api/accounts/link`           | 必要 | 連携開始。`{ "returnTo": "..." }` を渡すと同意画面の `url` が返る                                                               |
-| DELETE   | `/api/accounts/:id`            | 必要 | 連携解除（Google 側のトークンも失効）                                                                                           |
+| DELETE   | `/api/accounts/:id`            | 必要 | 連携解除（Google 側のトークンも失効。そのアカウントを使う同期設定は無効化）                                                     |
+| GET      | `/api/rules`                   | 必要 | 同期設定の一覧                                                                                                                  |
+| POST     | `/api/rules`                   | 必要 | 同期設定の作成。形式エラーは 400（`details` に項目ごとの理由）、同じ送信元と同期先の組み合わせは 409                            |
+| GET      | `/api/rules/:id`               | 必要 | 同期設定の取得                                                                                                                  |
+| PUT      | `/api/rules/:id`               | 必要 | 同期設定の更新（全体置換）                                                                                                      |
+| DELETE   | `/api/rules/:id`               | 必要 | 同期設定の削除                                                                                                                  |
 
 認証が必要な API は `Authorization: Bearer <Firebase ID トークン>` を付け、`OWNER_EMAILS` に含まれるメールアドレスのユーザーだけが呼べます。
 

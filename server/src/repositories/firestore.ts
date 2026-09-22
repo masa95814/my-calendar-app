@@ -4,6 +4,7 @@ import {
   type Firestore,
 } from "firebase-admin/firestore";
 
+import type { SyncRule } from "../domain/rules.js";
 import type { CalendarSummary } from "../lib/google.js";
 import type {
   AccountStatus,
@@ -18,12 +19,14 @@ import type {
 //   oauthStates/{state}
 //   users/{uid}
 //   users/{uid}/accounts/{accountId}
+//   users/{uid}/rules/{ruleId}
 
 export function createFirestoreStores(db: Firestore): Stores {
   const statesCollection = db.collection("oauthStates");
   const userDoc = (uid: string) => db.collection("users").doc(uid);
   const accountsCollection = (uid: string) =>
     userDoc(uid).collection("accounts");
+  const rulesCollection = (uid: string) => userDoc(uid).collection("rules");
 
   return {
     oauthStates: {
@@ -99,6 +102,89 @@ export function createFirestoreStores(db: Firestore): Stores {
         );
       },
     },
+
+    rules: {
+      async list(uid) {
+        const snapshot = await rulesCollection(uid).orderBy("createdAt").get();
+        return snapshot.docs.map((doc) => fromRuleDoc(doc.id, doc.data()));
+      },
+      async get(uid, ruleId) {
+        const snapshot = await rulesCollection(uid).doc(ruleId).get();
+        const data = snapshot.data();
+        return snapshot.exists && data
+          ? fromRuleDoc(snapshot.id, data)
+          : undefined;
+      },
+      async findBySourceTarget(uid, sourceAccountId, targetAccountId) {
+        const snapshot = await rulesCollection(uid)
+          .where("source.accountId", "==", sourceAccountId)
+          .where("target.accountId", "==", targetAccountId)
+          .limit(1)
+          .get();
+        const doc = snapshot.docs[0];
+        return doc ? fromRuleDoc(doc.id, doc.data()) : undefined;
+      },
+      async create(uid, rule) {
+        await rulesCollection(uid).doc(rule.id).set(toRuleDoc(rule));
+      },
+      async update(uid, rule) {
+        await rulesCollection(uid).doc(rule.id).set(toRuleDoc(rule));
+      },
+      async delete(uid, ruleId) {
+        await rulesCollection(uid).doc(ruleId).delete();
+      },
+      async disableForAccount(uid, accountId) {
+        const [asSource, asTarget] = await Promise.all([
+          rulesCollection(uid).where("source.accountId", "==", accountId).get(),
+          rulesCollection(uid).where("target.accountId", "==", accountId).get(),
+        ]);
+        const refs = new Map(
+          [...asSource.docs, ...asTarget.docs].map((doc) => [doc.id, doc.ref]),
+        );
+        if (refs.size === 0) {
+          return 0;
+        }
+        const batch = db.batch();
+        for (const ref of refs.values()) {
+          batch.update(ref, { enabled: false, updatedAt: Timestamp.now() });
+        }
+        await batch.commit();
+        return refs.size;
+      },
+    },
+  };
+}
+
+function toRuleDoc(rule: SyncRule): DocumentData {
+  return {
+    name: rule.name,
+    enabled: rule.enabled,
+    source: rule.source,
+    target: rule.target,
+    windowDays: rule.windowDays,
+    filters: rule.filters,
+    output: rule.output,
+    createdAt: Timestamp.fromDate(rule.createdAt),
+    updatedAt: Timestamp.fromDate(rule.updatedAt),
+    lastSyncAt: rule.lastSyncAt ? Timestamp.fromDate(rule.lastSyncAt) : null,
+    lastError: rule.lastError,
+  };
+}
+
+function fromRuleDoc(id: string, data: DocumentData): SyncRule {
+  return {
+    id,
+    name: String(data.name ?? ""),
+    enabled: Boolean(data.enabled),
+    source: data.source as SyncRule["source"],
+    target: data.target as SyncRule["target"],
+    windowDays: Number(data.windowDays ?? 60),
+    filters: data.filters as SyncRule["filters"],
+    output: data.output as SyncRule["output"],
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+    lastSyncAt: data.lastSyncAt ? toDate(data.lastSyncAt) : null,
+    lastError: typeof data.lastError === "string" ? data.lastError : null,
   };
 }
 

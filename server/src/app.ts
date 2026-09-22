@@ -15,6 +15,7 @@ import type { Stores } from "./repositories/index.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { authRoutes, type FirebaseUserService } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { ruleRoutes } from "./routes/rules.js";
 
 export type AppDependencies = {
   config: Config;
@@ -59,6 +60,7 @@ export function createApp(deps: AppDependencies) {
   // ログイン確認用。アプリ側がトークンとバックエンドの疎通を確かめるのに使う
   api.get("/me", (c) => c.json(c.get("user")));
   api.route("/", accountRoutes(shared));
+  api.route("/", ruleRoutes(shared));
   app.route("/api", api);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
