@@ -1,8 +1,9 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
 import type { Config } from "./config.js";
+import type { CalendarClient } from "./lib/calendar.js";
 import type { TokenCipher } from "./lib/crypto.js";
 import type { GoogleOAuth } from "./lib/google.js";
 import { logger } from "./lib/logger.js";
@@ -11,11 +12,14 @@ import {
   type AuthEnv,
   type VerifyIdToken,
 } from "./middleware/auth.js";
-import type { Stores } from "./repositories/index.js";
+import type { LinkedAccount, Stores } from "./repositories/index.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { authRoutes, type FirebaseUserService } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { ruleRoutes } from "./routes/rules.js";
+import { taskRoutes } from "./routes/tasks.js";
+import { webhookRoutes } from "./routes/webhooks.js";
+import { createSyncService } from "./services/sync.js";
 
 export type AppDependencies = {
   config: Config;
@@ -24,10 +28,14 @@ export type AppDependencies = {
   stores: Stores;
   firebase: FirebaseUserService;
   cipher: TokenCipher;
+  /** 連携アカウントの Calendar API クライアント */
+  calendarFor: (account: LinkedAccount) => CalendarClient;
   /** 現在時刻（テストで固定する） */
   now?: () => Date;
   /** OAuth の state を生成する（テストで固定する） */
   randomState?: () => string;
+  /** watch チャネルの ID などを生成する（テストで固定する） */
+  randomId?: () => string;
 };
 
 /**
@@ -35,11 +43,23 @@ export type AppDependencies = {
  * テストでは偽物に差し替えて `app.request()` から呼べるようにする。
  */
 export function createApp(deps: AppDependencies) {
+  const now = deps.now ?? (() => new Date());
+  const sync = createSyncService({
+    stores: deps.stores,
+    calendarFor: deps.calendarFor,
+    now,
+    randomId: deps.randomId ?? (() => randomUUID()),
+    ...(deps.config.PUBLIC_BASE_URL
+      ? { publicBaseUrl: deps.config.PUBLIC_BASE_URL }
+      : {}),
+    watchTtlSeconds: deps.config.WATCH_TTL_SECONDS,
+  });
   const shared = {
     ...deps,
-    now: deps.now ?? (() => new Date()),
+    now,
     randomState:
       deps.randomState ?? (() => randomBytes(24).toString("base64url")),
+    sync,
   };
 
   const app = new Hono();
@@ -47,6 +67,9 @@ export function createApp(deps: AppDependencies) {
   // 認証不要
   app.route("/", healthRoutes);
   app.route("/", authRoutes(shared));
+  app.route("/", webhookRoutes(shared));
+  // Cloud Scheduler 用（共有シークレットで保護）
+  app.route("/", taskRoutes(shared));
 
   // 認証必須（許可されたメールアドレスのみ）
   const api = new Hono<AuthEnv>();
@@ -59,6 +82,11 @@ export function createApp(deps: AppDependencies) {
   );
   // ログイン確認用。アプリ側がトークンとバックエンドの疎通を確かめるのに使う
   api.get("/me", (c) => c.json(c.get("user")));
+  // 手動で全同期設定を同期する（アプリの「今すぐ同期」）
+  api.post("/sync", async (c) => {
+    const summary = await sync.syncUser(c.get("user").uid, { full: true });
+    return c.json({ summary });
+  });
   api.route("/", accountRoutes(shared));
   api.route("/", ruleRoutes(shared));
   app.route("/api", api);

@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 
 import { createApp } from "./app.js";
 import { loadConfig, loadDotEnv } from "./config.js";
+import { createCalendarClientFactory } from "./lib/calendar.js";
 import { createTokenCipher } from "./lib/crypto.js";
 import { firebaseAuth, firestore, getFirebaseApp } from "./lib/firebase.js";
 import { createGoogleOAuth } from "./lib/google.js";
@@ -33,6 +34,11 @@ const firebase: FirebaseUserService = {
   createCustomToken: (uid) => firebaseAuth().createCustomToken(uid),
 };
 
+const calendarClientFactory = createCalendarClientFactory({
+  clientId: config.GOOGLE_OAUTH_CLIENT_ID,
+  clientSecret: config.GOOGLE_OAUTH_CLIENT_SECRET,
+});
+
 const app = createApp({
   config,
   cipher,
@@ -43,6 +49,8 @@ const app = createApp({
   }),
   stores: createFirestoreStores(firestore()),
   firebase,
+  calendarFor: (account) =>
+    calendarClientFactory(cipher.decrypt(account.refreshTokenEnc)),
   verifyIdToken: async (token) => {
     const decoded = await firebaseAuth().verifyIdToken(token);
     // カスタムトークンでログインしたユーザーの ID トークンには email が無いことがあるため、ユーザー情報から補う
@@ -58,5 +66,7 @@ serve({ fetch: app.fetch, port: config.PORT }, (info) => {
     env: config.NODE_ENV,
     ownerCount: config.OWNER_EMAILS.length,
     redirectUri: config.OAUTH_REDIRECT_URI,
+    watch: config.PUBLIC_BASE_URL ? "enabled" : "disabled (polling only)",
+    tasksAuth: config.TASKS_SECRET ? "secret" : "open (development)",
   });
 });

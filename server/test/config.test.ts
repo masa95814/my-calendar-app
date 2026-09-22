@@ -42,17 +42,26 @@ describe("loadConfig", () => {
     ).toThrow(/GOOGLE_OAUTH_CLIENT_ID/);
   });
 
-  it("本番では TOKEN_ENCRYPTION_KEY が必須", () => {
+  it("本番では TOKEN_ENCRYPTION_KEY と TASKS_SECRET が必須", () => {
     expect(() => loadConfig({ ...baseEnv, NODE_ENV: "production" })).toThrow(
       /TOKEN_ENCRYPTION_KEY/,
     );
-    expect(
+    expect(() =>
       loadConfig({
         ...baseEnv,
         NODE_ENV: "production",
         TOKEN_ENCRYPTION_KEY: "x",
-      }).TOKEN_ENCRYPTION_KEY,
-    ).toBe("x");
+      }),
+    ).toThrow(/TASKS_SECRET/);
+    const config = loadConfig({
+      ...baseEnv,
+      NODE_ENV: "production",
+      TOKEN_ENCRYPTION_KEY: "x",
+      TASKS_SECRET: "s",
+    });
+    expect(config.TOKEN_ENCRYPTION_KEY).toBe("x");
+    expect(config.TASKS_SECRET).toBe("s");
+    expect(config.WATCH_TTL_SECONDS).toBe(7 * 24 * 60 * 60);
   });
 
   it("不正な値は理由付きで例外にする", () => {

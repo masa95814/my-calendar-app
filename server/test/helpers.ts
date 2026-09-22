@@ -10,10 +10,14 @@ import type {
 } from "../src/lib/google.js";
 import type {
   LinkedAccount,
+  MirrorRecord,
   OAuthState,
   Stores,
+  SyncState,
+  WatchChannel,
 } from "../src/repositories/index.js";
 import type { FirebaseUserService } from "../src/routes/auth.js";
+import { createFakeCalendars, type FakeCalendars } from "./fakeCalendar.js";
 
 /** テスト用の最小限の環境変数 */
 export const baseEnv: NodeJS.ProcessEnv = {
@@ -38,11 +42,18 @@ export const fakeVerifyIdToken = async (token: string) => {
 };
 
 export const ownerHeaders = { Authorization: "Bearer owner-token" };
+export const jsonHeaders = {
+  ...ownerHeaders,
+  "content-type": "application/json",
+};
 
 export type MemoryStores = Stores & {
   states: Map<string, OAuthState>;
   accounts: Stores["accounts"] & { data: Map<string, LinkedAccount> };
   rules: Stores["rules"] & { data: Map<string, SyncRule> };
+  mirrors: Stores["mirrors"] & { data: Map<string, MirrorRecord> };
+  syncStates: Stores["syncStates"] & { data: Map<string, SyncState> };
+  channels: Stores["channels"] & { data: Map<string, WatchChannel> };
   logins: { uid: string; email: string; at: Date }[];
 };
 
@@ -51,13 +62,19 @@ export function createMemoryStores(): MemoryStores {
   const states = new Map<string, OAuthState>();
   const accountsData = new Map<string, LinkedAccount>();
   const rulesData = new Map<string, SyncRule>();
+  const mirrorsData = new Map<string, MirrorRecord>();
+  const syncStatesData = new Map<string, SyncState>();
+  const channelsData = new Map<string, WatchChannel>();
   const logins: MemoryStores["logins"] = [];
   const key = (uid: string, id: string) => `${uid}/${id}`;
-  const rulesOf = (uid: string) =>
-    [...rulesData.entries()]
+  const ofUser = <T>(map: Map<string, T>, uid: string): T[] =>
+    [...map.entries()]
       .filter(([k]) => k.startsWith(`${uid}/`))
-      .map(([, v]) => v)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      .map(([, v]) => v);
+  const rulesOf = (uid: string) =>
+    ofUser(rulesData, uid).sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    );
 
   return {
     states,
@@ -113,10 +130,9 @@ export function createMemoryStores(): MemoryStores {
     accounts: {
       data: accountsData,
       async list(uid) {
-        return [...accountsData.entries()]
-          .filter(([k]) => k.startsWith(`${uid}/`))
-          .map(([, v]) => v)
-          .sort((a, b) => a.linkedAt.getTime() - b.linkedAt.getTime());
+        return ofUser(accountsData, uid).sort(
+          (a, b) => a.linkedAt.getTime() - b.linkedAt.getTime(),
+        );
       },
       async get(uid, id) {
         return accountsData.get(key(uid, id));
@@ -131,6 +147,71 @@ export function createMemoryStores(): MemoryStores {
     users: {
       async recordLogin(uid, email, at) {
         logins.push({ uid, email, at });
+      },
+      async listUids() {
+        const uids = new Set<string>();
+        for (const k of [...accountsData.keys(), ...rulesData.keys()]) {
+          uids.add(k.split("/")[0] ?? "");
+        }
+        for (const l of logins) {
+          uids.add(l.uid);
+        }
+        return [...uids].filter(Boolean);
+      },
+    },
+    syncStates: {
+      data: syncStatesData,
+      async get(uid, id) {
+        return syncStatesData.get(key(uid, id));
+      },
+      async list(uid) {
+        return ofUser(syncStatesData, uid);
+      },
+      async upsert(uid, state) {
+        syncStatesData.set(key(uid, state.id), state);
+      },
+      async delete(uid, id) {
+        syncStatesData.delete(key(uid, id));
+      },
+    },
+    mirrors: {
+      data: mirrorsData,
+      async get(uid, id) {
+        return mirrorsData.get(key(uid, id));
+      },
+      async upsert(uid, record) {
+        mirrorsData.set(key(uid, record.id), record);
+      },
+      async delete(uid, id) {
+        mirrorsData.delete(key(uid, id));
+      },
+      async listByRule(uid, ruleId) {
+        return ofUser(mirrorsData, uid).filter((m) => m.ruleId === ruleId);
+      },
+      async listBySourceCalendar(uid, sourceAccountId, sourceCalendarId) {
+        return ofUser(mirrorsData, uid).filter(
+          (m) =>
+            m.sourceAccountId === sourceAccountId &&
+            m.sourceCalendarId === sourceCalendarId,
+        );
+      },
+      async listByAccount(uid, accountId) {
+        return ofUser(mirrorsData, uid).filter(
+          (m) =>
+            m.sourceAccountId === accountId || m.targetAccountId === accountId,
+        );
+      },
+    },
+    channels: {
+      data: channelsData,
+      async get(channelId) {
+        return channelsData.get(channelId);
+      },
+      async upsert(channel) {
+        channelsData.set(channel.id, channel);
+      },
+      async delete(channelId) {
+        channelsData.delete(channelId);
       },
     },
   };
@@ -221,6 +302,7 @@ export type TestHarness = {
   stores: MemoryStores;
   google: FakeGoogle;
   firebase: FakeFirebase;
+  calendars: FakeCalendars;
   cipher: ReturnType<typeof createTokenCipher>;
   clock: { now: Date };
 };
@@ -234,7 +316,9 @@ export function buildTestApp(
   const firebase = createFakeFirebase();
   const cipher = createTokenCipher();
   const clock = { now: new Date("2026-09-23T00:00:00Z") };
+  const calendars = createFakeCalendars(() => clock.now);
   let stateCounter = 0;
+  let idCounter = 0;
 
   const { env, ...depOverrides } = overrides;
   const app = createApp({
@@ -244,10 +328,79 @@ export function buildTestApp(
     stores,
     firebase,
     cipher,
+    calendarFor: (account) => calendars.clientFor(account.id),
     now: () => clock.now,
     randomState: () => `state-${++stateCounter}`,
+    randomId: () => `id-${++idCounter}`,
     ...depOverrides,
   });
 
-  return { app, stores, google, firebase, cipher, clock };
+  return { app, stores, google, firebase, calendars, cipher, clock };
+}
+
+/** テスト用の連携アカウント */
+export function makeAccount(
+  h: TestHarness,
+  overrides: Partial<LinkedAccount> & { id: string; email: string },
+): LinkedAccount {
+  return {
+    hd: undefined,
+    type: "personal",
+    refreshTokenEnc: h.cipher.encrypt(`rt-${overrides.id}`),
+    scopes: [],
+    status: "ok",
+    calendars: [
+      {
+        id: "primary",
+        summary: overrides.email,
+        primary: true,
+        accessRole: "owner",
+        timeZone: "Asia/Tokyo",
+      },
+    ],
+    linkedAt: new Date("2026-09-01T00:00:00Z"),
+    updatedAt: new Date("2026-09-01T00:00:00Z"),
+    ...overrides,
+  };
+}
+
+/** Workspace の A と B、個人の P を連携済みにする */
+export async function seedAccounts(h: TestHarness) {
+  await h.stores.accounts.upsert(
+    "owner-uid",
+    makeAccount(h, {
+      id: "acc-a",
+      email: "a@company-a.example",
+      hd: "company-a.example",
+      type: "workspace",
+      calendars: [
+        {
+          id: "primary",
+          summary: "a",
+          primary: true,
+          accessRole: "owner",
+          timeZone: "Asia/Tokyo",
+        },
+        {
+          id: "team-cal",
+          summary: "チーム",
+          primary: false,
+          accessRole: "writer",
+        },
+      ],
+    }),
+  );
+  await h.stores.accounts.upsert(
+    "owner-uid",
+    makeAccount(h, {
+      id: "acc-b",
+      email: "b@company-b.example",
+      hd: "company-b.example",
+      type: "workspace",
+    }),
+  );
+  await h.stores.accounts.upsert(
+    "owner-uid",
+    makeAccount(h, { id: "acc-p", email: "me@gmail.com", type: "personal" }),
+  );
 }
