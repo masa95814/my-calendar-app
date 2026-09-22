@@ -1,0 +1,3 @@
+# 検索エンジンに載せない
+User-agent: *
+Disallow: /
