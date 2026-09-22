@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,6 +20,7 @@ import {
   type StatusResponse,
 } from "../lib/api";
 import { formatDateTime } from "../lib/dates";
+import { confirmAction, notify } from "../lib/dialog";
 
 /** 設定（F7 の状態表示、手動同期、ログアウト、復旧操作） */
 export default function SettingsScreen() {
@@ -53,38 +53,33 @@ export default function SettingsScreen() {
     setSyncing(true);
     try {
       const { summary } = await api.syncAll();
-      Alert.alert("同期が完了しました", describeSyncSummary(summary));
+      notify("同期が完了しました", describeSyncSummary(summary));
       await load();
     } catch (caught) {
-      Alert.alert("同期できませんでした", describeApiError(caught));
+      notify("同期できませんでした", describeApiError(caught));
     } finally {
       setSyncing(false);
     }
   };
 
-  const confirmPurge = (accountId: string, email: string) => {
-    Alert.alert(
-      "ミラー予定を一括削除しますか？",
-      `${email} のメインカレンダーにある、このアプリが作成したすべての予定を削除します。対応表が失われた場合の復旧用です。`,
-      [
-        { text: "キャンセル", style: "cancel" },
-        {
-          text: "削除する",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const result = await api.purgeMirrors(accountId);
-              Alert.alert(
-                "削除しました",
-                `予定 ${result.deletedEvents} 件、対応表 ${result.deletedRecords} 件`,
-              );
-            } catch (caught) {
-              Alert.alert("削除できませんでした", describeApiError(caught));
-            }
-          },
-        },
-      ],
-    );
+  const confirmPurge = async (accountId: string, email: string) => {
+    const ok = await confirmAction({
+      title: "ミラー予定を一括削除しますか？",
+      message: `${email} のメインカレンダーにある、このアプリが作成したすべての予定を削除します。対応表が失われた場合の復旧用です。`,
+      confirmLabel: "削除する",
+    });
+    if (!ok) {
+      return;
+    }
+    try {
+      const result = await api.purgeMirrors(accountId);
+      notify(
+        "削除しました",
+        `予定 ${result.deletedEvents} 件、対応表 ${result.deletedRecords} 件`,
+      );
+    } catch (caught) {
+      notify("削除できませんでした", describeApiError(caught));
+    }
   };
 
   if (loading) {
