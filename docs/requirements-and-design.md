@@ -105,7 +105,7 @@ Claude 側で決めた事項（異論があれば変更する）:
 | タイトル                   | 固定文言、または `{title}` `{account}` を使えるテンプレート                                                                   | 「不在」または「予定あり」                |
 | 説明を写す                 | 元予定の説明文をコピーするか                                                                                                  | しない                                    |
 | 場所・会議リンクを写す     | 元予定の場所と会議リンクをコピーするか                                                                                        | しない                                    |
-| 公開設定                   | 限定公開（private）か既定か                                                                                                   | 限定公開                                  |
+| 公開設定                   | 公開（public）/ 非公開（private）/ 同期先カレンダーの既定（2026-09-23 変更: 既定を公開に）                                    | 公開                                      |
 | 終日の元予定の扱い         | 「不在」は終日にできないため、その日の 0:00〜24:00 の時間指定に変換する、または同期しない                                     | 変換する                                  |
 | 自動辞退（不在のみ）       | 辞退しない / 新規の招待のみ辞退 / 既存も含めて全て辞退                                                                        | 新規の招待のみ辞退                        |
 | 辞退メッセージ（不在のみ） | 自動辞退時に相手へ送る文面                                                                                                    | 「別件の予定があるため参加できません。」  |
@@ -240,7 +240,7 @@ users/{uid}/accounts/{accountId}/watch/{calendarId}
     "title": "不在",
     "copyDescription": false,
     "copyLocation": false,
-    "visibility": "private",
+    "visibility": "public",
     "allDaySourceHandling": "fullDay",
     "autoDeclineMode": "declineOnlyNewConflictingInvitations",
     "declineMessage": "別件の予定があるため参加できません。"

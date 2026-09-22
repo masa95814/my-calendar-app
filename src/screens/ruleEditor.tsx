@@ -508,7 +508,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
           />
           <Field label="公開設定">
             <Choice
-              options={(["private", "default"] as const).map((v) => ({
+              options={(["public", "private", "default"] as const).map((v) => ({
                 value: v,
                 label: VISIBILITY_LABELS[v],
               }))}

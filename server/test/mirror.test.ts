@@ -51,7 +51,7 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       title: "不在",
       copyDescription: false,
       copyLocation: false,
-      visibility: "private",
+      visibility: "public",
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -88,7 +88,7 @@ describe("buildMirrorEvent", () => {
       start: { dateTime: "2026-09-24T10:00:00+09:00" },
       end: { dateTime: "2026-09-24T11:00:00+09:00" },
       transparency: "opaque",
-      visibility: "private",
+      visibility: "public",
       eventType: "outOfOffice",
       outOfOfficeProperties: {
         autoDeclineMode: "declineOnlyNewConflictingInvitations",
@@ -163,6 +163,37 @@ describe("buildMirrorEvent", () => {
     const busy = buildMirrorEvent(allDay, rule({ kind: "busy" }), context);
     expect(busy.start).toEqual({ date: "2026-09-25" });
     expect(busy.end).toEqual({ date: "2026-09-27" });
+  });
+});
+
+describe("公開設定", () => {
+  it("公開・非公開はそのまま、カレンダーの既定は visibility を付けない", () => {
+    expect(
+      buildMirrorEvent(timed, rule({ visibility: "public" }), context)
+        .visibility,
+    ).toBe("public");
+    expect(
+      buildMirrorEvent(timed, rule({ visibility: "private" }), context)
+        .visibility,
+    ).toBe("private");
+    expect(
+      buildMirrorEvent(timed, rule({ visibility: "default" }), context)
+        .visibility,
+    ).toBeUndefined();
+  });
+
+  it("公開設定を変えると指紋が変わり、既存のミラーも更新される", () => {
+    const pub = buildMirrorEvent(
+      timed,
+      rule({ visibility: "public" }),
+      context,
+    );
+    const priv = buildMirrorEvent(
+      timed,
+      rule({ visibility: "private" }),
+      context,
+    );
+    expect(fingerprintOf(pub)).not.toBe(fingerprintOf(priv));
   });
 });
 

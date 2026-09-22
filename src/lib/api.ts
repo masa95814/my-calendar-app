@@ -50,7 +50,7 @@ export type AutoDeclineMode =
   | "declineOnlyNewConflictingInvitations"
   | "declineAllConflictingInvitations";
 export type AllDaySourceHandling = "fullDay" | "skip";
-export type Visibility = "private" | "default";
+export type Visibility = "public" | "private" | "default";
 
 export type RuleFilters = {
   minAttendees: number | null;
