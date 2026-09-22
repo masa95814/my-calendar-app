@@ -3,6 +3,21 @@
 バックエンドを Cloud Run に置き、Cloud Scheduler で定期同期を回します。
 作業のほとんどは `server/scripts/deploy.sh` が行います。何度実行しても同じ状態になるので、コードを更新したときの再デプロイにもそのまま使えます。
 
+## CI/CD（GitHub Actions）
+
+通常の本番反映は **main へのマージで自動** で行われます。手元での `deploy.sh` の実行は、初回構築や設定（環境変数・シークレット・権限・Scheduler）を変えるときだけで済みます。
+
+| ワークフロー                             | タイミング                                          | 内容                                                                                  |
+| ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| CI（`.github/workflows/ci.yml`）         | develop / main への Pull Request、develop への push | アプリの型チェック・ESLint・Prettier・Web ビルド、サーバーの型チェック・テスト        |
+| Deploy（`.github/workflows/deploy.yml`） | main への push（マージ）、手動実行（main のみ）     | バックエンドを Cloud Run に配置、Web 版アプリとホームページを Firebase Hosting に公開 |
+
+- Google Cloud へは Workload Identity 連携で認証する。鍵ファイルや秘密情報は GitHub に置かない
+- 受け付けるのは `masa95814/my-calendar-app` の `refs/heads/main` からの実行だけ（Workload Identity プロバイダの条件で制限）
+- デプロイ専用アカウント `github-deployer@my-calendar-app-509416.iam.gserviceaccount.com` の権限: `roles/run.sourceDeveloper`、`roles/firebasehosting.admin`、`roles/logging.viewer`、`roles/serviceusage.serviceUsageConsumer`、実行アカウント（compute の既定）への `roles/iam.serviceAccountUser`
+- Cloud Run の環境変数とシークレットは既存の設定を引き継ぐ。変える場合は手元で `server/scripts/deploy.sh` を実行する
+- GitHub のリポジトリ変数（Settings → Secrets and variables → Actions → Variables）: `GCP_PROJECT_ID`、`GCP_REGION`、`CLOUD_RUN_SERVICE`、`GCP_WIF_PROVIDER`、`GCP_DEPLOY_SA`、`EXPO_PUBLIC_*`（すべて公開情報）
+
 ## 1. 事前準備（初回のみ）
 
 ```bash

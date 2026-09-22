@@ -15,7 +15,10 @@ PUBLIC_DIR="$(cd "${PUBLIC_DIR:-public}" && pwd)"
 SPA="${SPA:-0}"
 API="https://firebasehosting.googleapis.com/v1beta1"
 
-gcloud services enable firebasehosting.googleapis.com --project "$PROJECT" >/dev/null
+# CI（デプロイ専用アカウント）では API の有効化権限を持たせていないため、SKIP_ENABLE=1 で飛ばす
+if [[ "${SKIP_ENABLE:-0}" != "1" ]]; then
+  gcloud services enable firebasehosting.googleapis.com --project "$PROJECT" >/dev/null
+fi
 ACCESS_TOKEN="$(gcloud auth print-access-token)"
 
 # gcloud 用に指定した Python（3.10 以上、HTTPS 対応）を優先する。システムの python3 が古い場合があるため
