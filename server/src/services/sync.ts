@@ -1,4 +1,9 @@
-import { evaluateEvent } from "../domain/filter.js";
+import {
+  evaluateEvent,
+  isAllDay,
+  isMirrorEvent,
+  MIRROR_KEYS,
+} from "../domain/filter.js";
 import {
   buildMirrorEvent,
   fingerprintOf,
@@ -146,6 +151,33 @@ export function createSyncService(deps: SyncDeps) {
       }
     } while (pageToken);
     return { events, nextSyncToken };
+  }
+
+  /** タグで絞り込んでメインカレンダーの予定を全ページ取得する（過去 1 日〜先 400 日） */
+  async function fetchTaggedEvents(
+    client: CalendarClient,
+    calendarId: string,
+    tags: string[],
+  ): Promise<CalendarEvent[]> {
+    const now = deps.now();
+    const events: CalendarEvent[] = [];
+    let pageToken: string | undefined;
+    do {
+      const page = await client.listEvents({
+        calendarId,
+        timeMin: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        timeMax: new Date(
+          now.getTime() + 400 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        privateExtendedProperty: tags,
+        ...(pageToken ? { pageToken } : {}),
+      });
+      events.push(
+        ...page.items.filter((event) => event.status !== "cancelled"),
+      );
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return events;
   }
 
   async function markAccountReauthRequired(
@@ -407,6 +439,39 @@ export function createSyncService(deps: SyncDeps) {
           }
         }
       }
+
+      // 対応表が失われていても、タグで見つかるこの同期設定のミラーのうち対応表に無いものは掃除する
+      for (const rule of group.rules) {
+        if (ruleErrors.has(rule.id)) {
+          continue;
+        }
+        const targetAccount = accountsById.get(rule.target.accountId);
+        if (!targetAccount) {
+          continue;
+        }
+        try {
+          const client =
+            targetClients.get(targetAccount.id) ??
+            deps.calendarFor(targetAccount);
+          const known = new Set(
+            (await stores.mirrors.listByRule(uid, rule.id)).map(
+              (r) => r.targetEventId,
+            ),
+          );
+          const tagged = await fetchTaggedEvents(client, TARGET_CALENDAR_ID, [
+            `${MIRROR_KEYS.ruleId}=${rule.id}`,
+            `${MIRROR_KEYS.sourceCalendarId}=${group.calendarId}`,
+          ]);
+          for (const event of tagged) {
+            if (event.id && !known.has(event.id)) {
+              await client.deleteEvent(TARGET_CALENDAR_ID, event.id);
+              summary.deleted++;
+            }
+          }
+        } catch (error) {
+          summary.errors.push(`${rule.name}: ${describeError(error)}`);
+        }
+      }
     }
 
     const now = deps.now();
@@ -660,16 +725,130 @@ export function createSyncService(deps: SyncDeps) {
     return { handled: true, summary: total };
   }
 
+  /**
+   * そのアカウントのメインカレンダーにある本アプリのミラー予定を、対応表の有無に関わらずすべて削除する。
+   * エミュレータの消失などで対応表が失われたときの復旧用
+   */
+  async function purgeMirrorsInAccount(
+    uid: string,
+    accountId: string,
+  ): Promise<{ deletedEvents: number; deletedRecords: number }> {
+    const account = await stores.accounts.get(uid, accountId);
+    if (!account) {
+      return { deletedEvents: 0, deletedRecords: 0 };
+    }
+    const client = deps.calendarFor(account);
+    const tagged = await fetchTaggedEvents(client, TARGET_CALENDAR_ID, [
+      `${MIRROR_KEYS.app}=1`,
+    ]);
+    let deletedEvents = 0;
+    for (const event of tagged) {
+      if (event.id) {
+        await client.deleteEvent(TARGET_CALENDAR_ID, event.id);
+        deletedEvents++;
+      }
+    }
+    let deletedRecords = 0;
+    for (const record of await stores.mirrors.listByAccount(uid, accountId)) {
+      if (record.targetAccountId === accountId) {
+        await stores.mirrors.delete(uid, record.id);
+        deletedRecords++;
+      }
+    }
+    logger.info("アカウントのミラー予定を一括削除しました", {
+      uid,
+      accountId,
+      deletedEvents,
+      deletedRecords,
+    });
+    return { deletedEvents, deletedRecords };
+  }
+
+  /** 統合カレンダー表示用に、全連携アカウントのメインカレンダーの予定を集める */
+  async function listUnifiedEvents(
+    uid: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ events: UnifiedEvent[]; errors: string[] }> {
+    const accounts = await stores.accounts.list(uid);
+    const events: UnifiedEvent[] = [];
+    const errors: string[] = [];
+    for (const account of accounts) {
+      if (account.status === "reauth_required") {
+        errors.push(`${account.email}: 再認証が必要です`);
+        continue;
+      }
+      try {
+        const client = deps.calendarFor(account);
+        let pageToken: string | undefined;
+        do {
+          const page = await client.listEvents({
+            calendarId: TARGET_CALENDAR_ID,
+            timeMin: from.toISOString(),
+            timeMax: to.toISOString(),
+            ...(pageToken ? { pageToken } : {}),
+          });
+          for (const event of page.items) {
+            if (!event.id || event.status === "cancelled") {
+              continue;
+            }
+            events.push({
+              accountId: account.id,
+              accountEmail: account.email,
+              id: event.id,
+              summary: event.summary ?? "（タイトルなし）",
+              start: event.start?.dateTime ?? event.start?.date ?? "",
+              end: event.end?.dateTime ?? event.end?.date ?? "",
+              allDay: isAllDay(event),
+              eventType: event.eventType ?? "default",
+              isMirror: isMirrorEvent(event),
+              mirrorRuleId:
+                event.extendedProperties?.private?.[MIRROR_KEYS.ruleId] ?? null,
+              hangoutLink: event.hangoutLink ?? null,
+            });
+          }
+          pageToken = page.nextPageToken;
+        } while (pageToken);
+      } catch (error) {
+        if (error instanceof AuthRevokedError) {
+          await markAccountReauthRequired(uid, account);
+        }
+        errors.push(`${account.email}: ${describeError(error)}`);
+      }
+    }
+    events.sort((a, b) => a.start.localeCompare(b.start));
+    return { events, errors };
+  }
+
   return {
     syncUser,
     syncRule,
     syncAllUsers,
     deleteMirrorsForRule,
     deleteMirrorsForAccount,
+    purgeMirrorsInAccount,
     ensureWatchChannels,
     handleNotification,
+    listUnifiedEvents,
   };
 }
+
+/** 統合カレンダー表示の 1 件 */
+export type UnifiedEvent = {
+  accountId: string;
+  accountEmail: string;
+  id: string;
+  summary: string;
+  /** dateTime（オフセット付き）または終日の date */
+  start: string;
+  end: string;
+  allDay: boolean;
+  eventType: string;
+  /** 本アプリが作成したミラー予定か */
+  isMirror: boolean;
+  mirrorRuleId: string | null;
+  hangoutLink: string | null;
+};
 
 export type SyncService = ReturnType<typeof createSyncService>;
 

@@ -117,9 +117,18 @@ export function createFakeCalendars(now: () => Date): FakeCalendars {
               nextSyncToken: `v:${version}`,
             };
           }
+          const tags = (params.privateExtendedProperty ?? []).map((kv) => {
+            const [k, ...rest] = kv.split("=");
+            return [k ?? "", rest.join("=")] as const;
+          });
           return {
             items: [...b.values()]
               .filter((s) => s.event.status !== "cancelled")
+              .filter((s) =>
+                tags.every(
+                  ([k, v]) => s.event.extendedProperties?.private?.[k] === v,
+                ),
+              )
               .map((s) => s.event),
             nextSyncToken: `v:${version}`,
           };
