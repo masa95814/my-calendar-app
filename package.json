@@ -10,7 +10,8 @@
     "lint": "expo lint",
     "format": "prettier --check \"**/*.{ts,tsx,js,mjs,md,json}\"",
     "format:fix": "prettier --write \"**/*.{ts,tsx,js,mjs,md,json}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy:web": "./hosting/deploy-app.sh"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

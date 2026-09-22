@@ -41,6 +41,11 @@ TOKEN_KEY="$(env_value TOKEN_ENCRYPTION_KEY)"
 TASKS_SECRET="$(env_value TASKS_SECRET || true)"
 RETURN_PREFIXES="$(env_value APP_RETURN_URL_PREFIXES || true)"
 RETURN_PREFIXES="${RETURN_PREFIXES:-mycalendarapp://,exp://}"
+# Web 版アプリを公開している URL（例: https://<サイト>.web.app）。CORS とログイン後の戻り先に許可する
+WEB_APP_URL="$(env_value WEB_APP_URL || true)"
+if [[ -n "$WEB_APP_URL" && ",${RETURN_PREFIXES}," != *",${WEB_APP_URL},"* ]]; then
+  RETURN_PREFIXES="${RETURN_PREFIXES},${WEB_APP_URL}"
+fi
 
 for name in PROJECT OWNER_EMAILS CLIENT_ID CLIENT_SECRET TOKEN_KEY; do
   if [[ -z "${!name}" ]]; then
@@ -106,7 +111,7 @@ echo "   $RUN_SA"
 deploy() {
   local base_url="$1"
   # OWNER_EMAILS と APP_RETURN_URL_PREFIXES はカンマを含むので、区切り文字を | にして渡す（^|^ 記法）
-  local env_vars="NODE_ENV=production|OWNER_EMAILS=${OWNER_EMAILS}|GOOGLE_OAUTH_CLIENT_ID=${CLIENT_ID}|APP_RETURN_URL_PREFIXES=${RETURN_PREFIXES}"
+  local env_vars="NODE_ENV=production|OWNER_EMAILS=${OWNER_EMAILS}|GOOGLE_OAUTH_CLIENT_ID=${CLIENT_ID}|APP_RETURN_URL_PREFIXES=${RETURN_PREFIXES}|WEB_ALLOWED_ORIGINS=${WEB_APP_URL}"
   if [[ -n "$base_url" ]]; then
     env_vars="${env_vars}|PUBLIC_BASE_URL=${base_url}|OAUTH_REDIRECT_URI=${base_url}/auth/google/callback"
   else
