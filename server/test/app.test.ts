@@ -1,25 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "../src/app.js";
-import { loadConfig } from "../src/config.js";
+import { buildTestApp, ownerHeaders } from "./helpers.js";
 
-const config = loadConfig({
-  NODE_ENV: "test",
-  OWNER_EMAILS: "Owner@example.com",
-});
-
-// Firebase を使わずにトークン検証を模倣する
-const verifyIdToken = async (token: string) => {
-  if (token === "owner-token") {
-    return { uid: "owner-uid", email: "owner@example.com" };
-  }
-  if (token === "stranger-token") {
-    return { uid: "stranger-uid", email: "stranger@example.com" };
-  }
-  throw new Error("invalid token");
-};
-
-const app = createApp({ config, verifyIdToken });
+const { app } = buildTestApp();
 
 describe("GET /healthz", () => {
   it("認証なしで 200 を返す", async () => {
@@ -51,9 +34,7 @@ describe("GET /api/me", () => {
   });
 
   it("許可されたユーザーなら uid とメールアドレスを返す（大文字小文字は区別しない）", async () => {
-    const res = await app.request("/api/me", {
-      headers: { Authorization: "Bearer owner-token" },
-    });
+    const res = await app.request("/api/me", { headers: ownerHeaders });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       uid: "owner-uid",

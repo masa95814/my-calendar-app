@@ -1,32 +1,58 @@
 import { z } from "zod";
 
+const commaSeparatedList = (value: string): string[] =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
 // 環境変数の定義。起動時に一度だけ検証し、以降は型付きの Config として扱う
-const envSchema = z.object({
-  NODE_ENV: z
-    .enum(["development", "test", "production"])
-    .default("development"),
-  PORT: z.coerce.number().int().positive().default(8080),
+const envSchema = z
+  .object({
+    NODE_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
+    PORT: z.coerce.number().int().positive().default(8080),
 
-  // Google Cloud / Firebase のプロジェクト ID（Cloud Run 上では自動で入る）
-  GOOGLE_CLOUD_PROJECT: z.string().min(1).optional(),
+    // Google Cloud / Firebase のプロジェクト ID（Cloud Run 上では自動で入る）
+    GOOGLE_CLOUD_PROJECT: z.string().min(1).optional(),
 
-  // アプリの利用を許可するメールアドレス（カンマ区切り）。小文字に正規化する
-  OWNER_EMAILS: z
-    .string()
-    .default("")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((email) => email.trim().toLowerCase())
-        .filter((email) => email.length > 0),
-    ),
+    // アプリの利用を許可するメールアドレス（カンマ区切り）。小文字に正規化する
+    OWNER_EMAILS: z
+      .string()
+      .default("")
+      .transform((value) =>
+        commaSeparatedList(value).map((email) => email.toLowerCase()),
+      ),
 
-  // Google OAuth（フェーズ 1 で必須にする。フェーズ 0 では未設定でも起動できる）
-  GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
-  OAUTH_REDIRECT_URI: z.string().url().optional(),
-  APP_DEEP_LINK: z.string().min(1).default("mycalendarapp://linked"),
-});
+    // Google OAuth（ログインとアカウント連携の両方で同じウェブ用クライアントを使う）
+    GOOGLE_OAUTH_CLIENT_ID: z.string().min(1),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1),
+    OAUTH_REDIRECT_URI: z.string().url(),
+
+    // OAuth 完了後にアプリへ戻る URL として許可する先頭文字列（カンマ区切り）
+    // 例: mycalendarapp://（開発ビルド）、exp://（Expo Go）、http://localhost（Web）
+    APP_RETURN_URL_PREFIXES: z
+      .string()
+      .default("mycalendarapp://,exp://,http://localhost")
+      .transform(commaSeparatedList),
+
+    // OAuth の state（CSRF 対策の一時トークン）の有効期間
+    OAUTH_STATE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+
+    // リフレッシュトークンを Firestore に保存するときの暗号鍵（base64 の 32 バイト）
+    // `openssl rand -base64 32` で生成する。本番では必須、開発では省略可（平文保存になる）
+    TOKEN_ENCRYPTION_KEY: z.string().min(1).optional(),
+  })
+  .superRefine((env, ctx) => {
+    if (env.NODE_ENV === "production" && !env.TOKEN_ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["TOKEN_ENCRYPTION_KEY"],
+        message: "本番では必須です（openssl rand -base64 32 で生成した値）",
+      });
+    }
+  });
 
 export type Config = z.infer<typeof envSchema>;
 
