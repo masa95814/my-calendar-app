@@ -93,7 +93,8 @@ put_secret tasks-secret "$TASKS_SECRET"
 echo "▶ 3. 実行サービスアカウントに権限を付与"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-for role in roles/secretmanager.secretAccessor roles/datastore.user roles/firebaseauth.admin; do
+# roles/cloudbuild.builds.builder: 新しいプロジェクトでは --source のビルドもこのアカウントで行われるため必要
+for role in roles/secretmanager.secretAccessor roles/datastore.user roles/firebaseauth.admin roles/cloudbuild.builds.builder; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:$RUN_SA" --role="$role" --condition=None >/dev/null
 done
