@@ -153,3 +153,20 @@ describe("watch チャネルと通知", () => {
     expect(await h.stores.channels.get(channel!.id)).toBeUndefined();
   });
 });
+
+describe("TASKS_SECRET の適用範囲", () => {
+  it("本番設定でも /tasks 以外のルート（/health、/api、/auth）には掛からない", async () => {
+    const h = buildTestApp({ env: { TASKS_SECRET: "s3cret" } });
+    expect((await h.app.request("/health")).status).toBe(200);
+    // 認証ミドルウェアまで届いて、自分のメッセージで 401 になる
+    const me = await h.app.request("/api/me");
+    expect(me.status).toBe(401);
+    expect(await me.json()).toEqual({ error: "認証が必要です" });
+    const login = await h.app.request(
+      "/auth/login/start?return_to=mycalendarapp://auth",
+    );
+    expect(login.status).toBe(302);
+    const hook = await h.app.request("/webhooks/calendar", { method: "POST" });
+    expect(hook.status).toBe(200);
+  });
+});

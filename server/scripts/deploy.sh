@@ -4,7 +4,6 @@
 # 使い方:
 #   cd server
 #   gcloud auth login                       # 初回のみ
-#   npx firebase-tools@latest login         # 初回のみ（Firestore ルールの適用に使う）
 #   ./scripts/deploy.sh                     # server/.env の値を使ってデプロイ
 #
 # やること:
@@ -12,7 +11,7 @@
 #   2. シークレット（OAuth クライアントシークレット、トークン暗号鍵、タスク用シークレット）を Secret Manager に登録
 #   3. Cloud Run の実行サービスアカウントに権限を付与
 #   4. Cloud Run にデプロイ（初回は URL 確定後に、その URL で環境変数を設定して再デプロイ）
-#   5. Firestore のセキュリティルールを適用
+#   5. Firebase の初期設定（Firebase の追加、Firestore 作成、Authentication 有効化、ルール適用、ウェブアプリ登録）
 #   6. Cloud Scheduler のジョブ（差分同期 10 分ごと、全件同期と watch 更新は毎日）を作成・更新
 #
 # シークレットの値は画面に表示しない。
@@ -63,7 +62,8 @@ gcloud services enable \
   run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   secretmanager.googleapis.com cloudscheduler.googleapis.com \
   calendar-json.googleapis.com firestore.googleapis.com \
-  iamcredentials.googleapis.com identitytoolkit.googleapis.com
+  iamcredentials.googleapis.com identitytoolkit.googleapis.com \
+  firebase.googleapis.com firebaserules.googleapis.com
 
 echo "▶ 2. シークレットを登録"
 # 値が変わったときだけ新しいバージョンを追加する
@@ -93,7 +93,8 @@ put_secret tasks-secret "$TASKS_SECRET"
 echo "▶ 3. 実行サービスアカウントに権限を付与"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-for role in roles/secretmanager.secretAccessor roles/datastore.user roles/firebaseauth.admin; do
+# roles/cloudbuild.builds.builder: 新しいプロジェクトでは --source のビルドもこのアカウントで行われるため必要
+for role in roles/secretmanager.secretAccessor roles/datastore.user roles/firebaseauth.admin roles/cloudbuild.builds.builder; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:$RUN_SA" --role="$role" --condition=None >/dev/null
 done
@@ -133,10 +134,88 @@ if [[ -z "$SERVICE_URL" ]]; then
 fi
 deploy "$SERVICE_URL"
 echo "   URL: $SERVICE_URL"
-curl -sf "$SERVICE_URL/healthz" >/dev/null && echo "   ヘルスチェック: OK" || echo "   ヘルスチェック: 失敗（ログを確認してください）"
+curl -sf "$SERVICE_URL/health" >/dev/null && echo "   ヘルスチェック: OK" || echo "   ヘルスチェック: 失敗（ログを確認してください）"
 
-echo "▶ 5. Firestore のセキュリティルールを適用"
-npx -y firebase-tools@latest deploy --only firestore:rules --project "$PROJECT" --non-interactive
+echo "▶ 5. Firebase の初期設定"
+# Google API を gcloud のログイン情報で直接呼ぶ（firebase-tools のログインは不要）
+ACCESS_TOKEN="$(gcloud auth print-access-token)"
+gapi() {
+  local method="$1" url="$2" body="${3:-}"
+  curl -sS -X "$method" "$url" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "x-goog-user-project: ${PROJECT}" \
+    -H "Content-Type: application/json" \
+    ${body:+--data "$body"}
+}
+http_status() {
+  curl -s -o /dev/null -w '%{http_code}' "$1" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" -H "x-goog-user-project: ${PROJECT}"
+}
+wait_until() {
+  local desc="$1" url="$2"
+  for _ in $(seq 1 30); do
+    [[ "$(http_status "$url")" == "200" ]] && return 0
+    sleep 5
+  done
+  echo "   $desc の完了を確認できませんでした" >&2
+  return 1
+}
+
+FIREBASE_API="https://firebase.googleapis.com/v1beta1/projects/${PROJECT}"
+if [[ "$(http_status "$FIREBASE_API")" != "200" ]]; then
+  gapi POST "${FIREBASE_API}:addFirebase" '{}' >/dev/null
+  wait_until "Firebase の追加" "$FIREBASE_API"
+  echo "   Firebase をプロジェクトに追加しました"
+else
+  echo "   Firebase: 追加済み"
+fi
+
+if ! gcloud firestore databases describe --database='(default)' >/dev/null 2>&1; then
+  gcloud firestore databases create --database='(default)' --location="$REGION" --type=firestore-native >/dev/null
+  echo "   Firestore データベースを作成しました（$REGION）"
+else
+  echo "   Firestore: 作成済み"
+fi
+
+AUTH_CONFIG="https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT}/config"
+if [[ "$(http_status "$AUTH_CONFIG")" != "200" ]]; then
+  gapi POST "https://identitytoolkit.googleapis.com/v2/projects/${PROJECT}/identityPlatform:initializeAuth" '{}' >/dev/null
+  wait_until "Authentication の有効化" "$AUTH_CONFIG"
+  echo "   Firebase Authentication を有効化しました"
+else
+  echo "   Authentication: 有効化済み"
+fi
+
+# セキュリティルール: ルールセットを作成し、cloud.firestore のリリースに紐付ける
+RULES_JSON="$(python3 -c 'import json,sys; print(json.dumps({"source":{"files":[{"name":"firestore.rules","content":open("firestore.rules").read()}]}}))')"
+RULESET="$(gapi POST "https://firebaserules.googleapis.com/v1/projects/${PROJECT}/rulesets" "$RULES_JSON" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+RELEASE="projects/${PROJECT}/releases/cloud.firestore"
+if [[ "$(http_status "https://firebaserules.googleapis.com/v1/${RELEASE}")" == "200" ]]; then
+  gapi PATCH "https://firebaserules.googleapis.com/v1/${RELEASE}" \
+    "{\"release\":{\"name\":\"${RELEASE}\",\"rulesetName\":\"${RULESET}\"}}" >/dev/null
+else
+  gapi POST "https://firebaserules.googleapis.com/v1/projects/${PROJECT}/releases" \
+    "{\"name\":\"${RELEASE}\",\"rulesetName\":\"${RULESET}\"}" >/dev/null
+fi
+echo "   Firestore のセキュリティルールを適用しました"
+
+# アプリ用のウェブアプリを登録し、設定値（公開情報）を取得する
+WEB_APP="$(gapi GET "${FIREBASE_API}/webApps" | python3 -c 'import json,sys; a=json.load(sys.stdin).get("apps",[]); print(a[0]["name"] if a else "")')"
+if [[ -z "$WEB_APP" ]]; then
+  gapi POST "${FIREBASE_API}/webApps" '{"displayName":"my-calendar-app"}' >/dev/null
+  for _ in $(seq 1 30); do
+    WEB_APP="$(gapi GET "${FIREBASE_API}/webApps" | python3 -c 'import json,sys; a=json.load(sys.stdin).get("apps",[]); print(a[0]["name"] if a else "")')"
+    [[ -n "$WEB_APP" ]] && break
+    sleep 5
+  done
+  echo "   ウェブアプリを登録しました"
+fi
+WEB_CONFIG="$(gapi GET "https://firebase.googleapis.com/v1beta1/${WEB_APP}/config")"
+FIREBASE_API_KEY="$(printf '%s' "$WEB_CONFIG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("apiKey",""))')"
+FIREBASE_APP_ID="$(printf '%s' "$WEB_CONFIG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("appId",""))')"
+FIREBASE_AUTH_DOMAIN="$(printf '%s' "$WEB_CONFIG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("authDomain",""))')"
+echo "   ウェブアプリ: ${FIREBASE_APP_ID}"
 
 echo "▶ 6. Cloud Scheduler のジョブを作成・更新"
 scheduler_job() {
@@ -165,10 +244,13 @@ cat <<EOF
   1. Google Cloud コンソール → Google Auth Platform → クライアント → ウェブ用クライアントの
      「承認済みのリダイレクト URI」に次を追加:
        ${SERVICE_URL}/auth/google/callback
-  2. アプリのルートの .env を本番向けに変更:
+  2. アプリのルートの .env を本番向けに変更（値はすべて公開情報）:
        EXPO_PUBLIC_API_BASE_URL=${SERVICE_URL}
-       EXPO_PUBLIC_FIREBASE_API_KEY / EXPO_PUBLIC_FIREBASE_APP_ID に Firebase のウェブアプリ設定の値
-       EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST は空にする
+       EXPO_PUBLIC_FIREBASE_API_KEY=${FIREBASE_API_KEY}
+       EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}
+       EXPO_PUBLIC_FIREBASE_PROJECT_ID=${PROJECT}
+       EXPO_PUBLIC_FIREBASE_APP_ID=${FIREBASE_APP_ID}
+       EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=
   3. アプリでログインし直し、Google アカウントを連携し直す（エミュレータのデータは本番に移らない）
   4. watch チャネルを張る: 同期設定を作ったあとに
        gcloud scheduler jobs run calendar-renew-watch --location $REGION
