@@ -1,22 +1,30 @@
-import React, { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
+import { Calendar, LocaleConfig, type DateData } from "react-native-calendars";
+import { useFocusEffect } from "@react-navigation/native";
+
 import {
-  Agenda,
-  AgendaEntry,
-  AgendaSchedule,
-  Calendar,
-  CalendarList,
-  DateData,
-  LocaleConfig,
-} from "react-native-calendars";
+  api,
+  describeApiError,
+  type LinkedAccount,
+  type UnifiedEvent,
+} from "../lib/api";
+import { buildAccountColors } from "../lib/colors";
+import {
+  addDays,
+  eventDateKey,
+  formatDateLabel,
+  formatTime,
+  fromDateString,
+  toDateString,
+} from "../lib/dates";
 
 // 日本語設定
 LocaleConfig.locales["jp"] = {
@@ -62,600 +70,398 @@ LocaleConfig.locales["jp"] = {
 };
 LocaleConfig.defaultLocale = "jp";
 
-// カレンダーの左右マージン（横スクロールの CalendarList の幅計算にも使う）
-const CALENDAR_HORIZONTAL_MARGIN = 20;
+/** 表示中の月の前後にどれだけ余分に取得するか（日） */
+const FETCH_MARGIN_DAYS = 7;
 
-// 端末のローカル日付を 'YYYY-MM-DD' 形式にする
-// ※ Date#toISOString() は UTC 基準のため、日本時間の 0〜9 時は前日になってしまう
-const toDateString = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+// react-native-calendars は MarkedDates をパッケージのトップから公開していないため、
+// この画面で使う分だけ型を定義する
+type MarkedDates = {
+  [date: string]: {
+    dots?: { key: string; color: string }[];
+    selected?: boolean;
+    selectedColor?: string;
+  };
 };
 
-// 型定義
-interface MarkedDates {
-  [date: string]: {
-    selected?: boolean;
-    marked?: boolean;
-    selectedColor?: string;
-    selectedTextColor?: string;
-    dotColor?: string;
-    dots?: { key: string; color: string }[];
-    disabled?: boolean;
-    disableTouchEvent?: boolean;
-    customStyles?: {
-      container?: any;
-      text?: any;
+/**
+ * 統合カレンダー（F6）。全連携アカウントのメインカレンダーの予定を 1 つの月表示に重ね、
+ * 選んだ日の予定を下に並べる。表示のみで、作成・編集はしない。
+ */
+export default function CalendarScreen() {
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [selected, setSelected] = useState(() => toDateString(new Date()));
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
+  const [events, setEvents] = useState<UnifiedEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  const load = useCallback(async () => {
+    try {
+      const from = addDays(month, -FETCH_MARGIN_DAYS);
+      const to = addDays(
+        new Date(month.getFullYear(), month.getMonth() + 1, 1),
+        FETCH_MARGIN_DAYS,
+      );
+      const [a, e] = await Promise.all([
+        api.listAccounts(),
+        api.listEvents(from, to),
+      ]);
+      setAccounts(a.accounts);
+      setEvents(e.events);
+      setWarnings(e.errors);
+      setError(null);
+    } catch (caught) {
+      setError(describeApiError(caught));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [month]);
+
+  // タブに戻ったときと、表示月が変わったときに再取得する
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  useEffect(() => {
+    setLoading(true);
+    void load();
+  }, [load]);
+
+  const colors = useMemo(
+    () => buildAccountColors(accounts.map((a) => a.id)),
+    [accounts],
+  );
+
+  /** 日付 → その日の予定（終日で複数日にまたがる予定は各日に載せる） */
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, UnifiedEvent[]>();
+    const push = (key: string, event: UnifiedEvent) => {
+      const list = map.get(key) ?? [];
+      list.push(event);
+      map.set(key, list);
     };
-  };
-}
+    for (const event of events) {
+      if (event.allDay) {
+        // 終日の end は翌日（排他的）
+        let cursor = fromDateString(event.start.slice(0, 10));
+        const end = fromDateString(event.end.slice(0, 10));
+        let guard = 0;
+        while (cursor.getTime() < end.getTime() && guard++ < 62) {
+          push(toDateString(cursor), event);
+          cursor = addDays(cursor, 1);
+        }
+      } else {
+        push(eventDateKey(event.start, false), event);
+      }
+    }
+    for (const list of map.values()) {
+      list.sort((x, y) => {
+        if (x.allDay !== y.allDay) {
+          return x.allDay ? -1 : 1;
+        }
+        return x.start.localeCompare(y.start);
+      });
+    }
+    return map;
+  }, [events]);
 
-interface Event {
-  date: string;
-  title: string;
-  type: "meeting" | "deadline" | "holiday" | "personal";
-}
-
-interface AgendaItem extends AgendaEntry {
-  name: string;
-  time: string;
-  duration: string;
-  location?: string;
-  type: "meeting" | "task" | "event" | "reminder";
-}
-
-interface PeriodMarking {
-  [date: string]: {
-    color?: string;
-    textColor?: string;
-    startingDay?: boolean;
-    endingDay?: boolean;
-    marked?: boolean;
-    dotColor?: string;
-  };
-}
-
-type CalendarType = "basic" | "agenda" | "period";
-
-// 基本カレンダーコンポーネント
-const BasicCalendarView = () => {
-  const [selected, setSelected] = useState<string>("");
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-
-  // サンプルイベントデータ
-  const events: Event[] = [
-    { date: "2024-01-15", title: "重要な会議", type: "meeting" },
-    { date: "2024-01-20", title: "プロジェクト締切", type: "deadline" },
-    { date: "2024-01-25", title: "休暇", type: "holiday" },
-    { date: "2024-01-28", title: "誕生日", type: "personal" },
-  ];
-
-  const eventColors = {
-    meeting: "#4ECDC4",
-    deadline: "#FF6B6B",
-    holiday: "#95E1D3",
-    personal: "#F38181",
-  };
-
-  const getMarkedDates = (): MarkedDates => {
+  const markedDates = useMemo(() => {
     const marked: MarkedDates = {};
-
-    events.forEach((event) => {
-      marked[event.date] = {
-        marked: true,
-        dotColor: eventColors[event.type],
-      };
-    });
-
-    if (selected) {
-      marked[selected] = {
-        ...marked[selected],
-        selected: true,
-        selectedColor: "#007AFF",
-        selectedTextColor: "#FFFFFF",
-      };
+    for (const [date, list] of eventsByDate) {
+      const seen = new Set<string>();
+      const dots: { key: string; color: string }[] = [];
+      for (const event of list) {
+        if (!seen.has(event.accountId)) {
+          seen.add(event.accountId);
+          dots.push({
+            key: event.accountId,
+            color: colors.get(event.accountId) ?? "#999999",
+          });
+        }
+      }
+      marked[date] = { dots };
     }
-
-    const today = toDateString(new Date());
-    marked[today] = {
-      ...marked[today],
-      customStyles: {
-        text: {
-          color: "#007AFF",
-          fontWeight: "bold",
-        },
-      },
+    marked[selected] = {
+      ...(marked[selected] ?? {}),
+      selected: true,
+      selectedColor: "#007AFF",
     };
-
     return marked;
-  };
+  }, [eventsByDate, colors, selected]);
 
-  const onDayPress = (day: DateData) => {
-    setSelected(day.dateString);
-
-    const dayEvents = events.filter((e) => e.date === day.dateString);
-    if (dayEvents.length > 0) {
-      const eventTitles = dayEvents.map((e) => e.title).join("\n");
-      Alert.alert(`${day.dateString}のイベント`, eventTitles, [{ text: "OK" }]);
-    }
-  };
+  const dayEvents = eventsByDate.get(selected) ?? [];
+  const accountLabel = (event: UnifiedEvent) =>
+    accounts.find((a) => a.id === event.accountId)?.hd ??
+    event.accountEmail.split("@")[0] ??
+    event.accountEmail;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            void load();
+          }}
+        />
+      }
+    >
       <Calendar
-        current={toDateString(currentMonth)}
-        onDayPress={onDayPress}
-        onMonthChange={(month) => setCurrentMonth(new Date(month.timestamp))}
-        markedDates={getMarkedDates()}
+        current={toDateString(month)}
+        markingType="multi-dot"
+        markedDates={markedDates}
+        onDayPress={(day: DateData) => setSelected(day.dateString)}
+        onMonthChange={(m: DateData) =>
+          setMonth(new Date(m.year, m.month - 1, 1))
+        }
+        enableSwipeMonths
         theme={{
           calendarBackground: "#FFFFFF",
           textSectionTitleColor: "#666666",
-          selectedDayTextColor: "#FFFFFF",
           todayTextColor: "#007AFF",
           dayTextColor: "#2D4150",
           textDisabledColor: "#D9E1E8",
           arrowColor: "#007AFF",
-          monthTextColor: "#007AFF",
-          textMonthFontSize: 18,
-          textMonthFontWeight: "bold",
-          textDayFontSize: 16,
+          monthTextColor: "#2D4150",
+          textMonthFontWeight: "600",
         }}
         style={styles.calendar}
       />
 
-      {selected ? (
-        <View style={styles.selectedInfo}>
-          <Text style={styles.selectedDate}>選択された日付: {selected}</Text>
+      {accounts.length > 0 ? (
+        <View style={styles.legend}>
+          {accounts.map((account) => (
+            <View key={account.id} style={styles.legendItem}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: colors.get(account.id) ?? "#999999" },
+                ]}
+              />
+              <Text style={styles.legendText} numberOfLines={1}>
+                {account.hd ?? account.email}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
 
-      <View style={styles.legend}>
-        <Text style={styles.legendTitle}>イベントカテゴリー</Text>
-        <View style={styles.legendItems}>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.dot, { backgroundColor: eventColors.meeting }]}
-            />
-            <Text style={styles.legendText}>会議</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.dot, { backgroundColor: eventColors.deadline }]}
-            />
-            <Text style={styles.legendText}>締切</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.dot, { backgroundColor: eventColors.holiday }]}
-            />
-            <Text style={styles.legendText}>休暇</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[styles.dot, { backgroundColor: eventColors.personal }]}
-            />
-            <Text style={styles.legendText}>個人</Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
-  );
-};
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {warnings.map((warning) => (
+        <Text key={warning} style={styles.warning}>
+          {warning}
+        </Text>
+      ))}
 
-// アジェンダビューコンポーネント
-const AgendaView = () => {
-  const [items, setItems] = useState<AgendaSchedule>({});
-  const [refreshing, setRefreshing] = useState(false);
-
-  const loadItems = (day: DateData) => {
-    const newItems: AgendaSchedule = { ...items };
-
-    setTimeout(() => {
-      for (let i = -15; i < 85; i++) {
-        const time = day.timestamp + i * 24 * 60 * 60 * 1000;
-        const strTime = new Date(time).toISOString().split("T")[0];
-
-        if (!newItems[strTime]) {
-          newItems[strTime] = [];
-          const numItems = Math.floor(Math.random() * 3 + 1);
-          for (let j = 0; j < numItems; j++) {
-            newItems[strTime].push({
-              name: getRandomEvent(j),
-              time: getRandomTime(j),
-              duration: getRandomDuration(),
-              location: getRandomLocation(),
-              type: getRandomType(),
-              height: 80,
-              day: strTime,
-            } as AgendaItem);
-          }
-        }
-      }
-      setItems(newItems);
-      setRefreshing(false);
-    }, 1000);
-  };
-
-  const getRandomEvent = (index: number) => {
-    const events = [
-      "開発チームミーティング",
-      "クライアント打ち合わせ",
-      "コードレビュー",
-    ];
-    return events[index % events.length];
-  };
-
-  const getRandomTime = (index: number) => {
-    const times = ["09:00", "10:30", "14:00"];
-    return times[index % times.length];
-  };
-
-  const getRandomDuration = () => "1時間";
-  const getRandomLocation = () => "会議室A";
-  const getRandomType = (): AgendaItem["type"] => "meeting";
-
-  // Agenda の renderItem は AgendaEntry を受け取る型なので、ここで AgendaItem に絞り込む
-  const renderItem = (reservation: AgendaEntry) => {
-    const item = reservation as AgendaItem;
-    return (
-      <TouchableOpacity
-        style={[styles.item, { borderLeftColor: "#4ECDC4" }]}
-        onPress={() => Alert.alert(item.name, `時間: ${item.time}`)}
-      >
-        <View style={styles.itemContent}>
-          <Text style={styles.itemTitle}>{item.name}</Text>
-          <View style={styles.itemDetails}>
-            <Text style={styles.itemTime}>{item.time}</Text>
-            <Text style={styles.itemDuration}>{item.duration}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderEmptyDate = () => (
-    <View style={styles.emptyDate}>
-      <Text style={styles.emptyDateText}>予定がありません</Text>
-    </View>
-  );
-
-  return (
-    <Agenda
-      items={items}
-      loadItemsForMonth={loadItems}
-      selected={toDateString(new Date())}
-      renderItem={renderItem}
-      renderEmptyDate={renderEmptyDate}
-      rowHasChanged={(r1, r2) => r1.name !== r2.name}
-      showClosingKnob={true}
-      refreshing={refreshing}
-      onRefresh={() => {
-        setRefreshing(true);
-        setItems({});
-        // ライブラリが渡す DateData と同じ形（timestamp は UTC 0時）で今日を渡す
-        const now = new Date();
-        loadItems({
-          dateString: toDateString(now),
-          day: now.getDate(),
-          month: now.getMonth() + 1,
-          year: now.getFullYear(),
-          timestamp: Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()),
-        });
-      }}
-      theme={{
-        agendaDayTextColor: "#007AFF",
-        agendaDayNumColor: "#007AFF",
-        agendaTodayColor: "#007AFF",
-        agendaKnobColor: "#007AFF",
-      }}
-      style={styles.agenda}
-    />
-  );
-};
-
-// 期間選択コンポーネント
-const PeriodView = () => {
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [markedDates, setMarkedDates] = useState<PeriodMarking>({});
-  // 横スクロールの CalendarList は calendarWidth（デフォルトは画面幅）単位でページングされるため、
-  // 左右マージン分を引いた幅を渡さないと 2 ページ目以降がずれていく
-  const { width: windowWidth } = useWindowDimensions();
-  const calendarWidth = windowWidth - CALENDAR_HORIZONTAL_MARGIN * 2;
-
-  const markPeriod = (start: string, end: string) => {
-    const marked: PeriodMarking = {};
-    const startTime = new Date(start).getTime();
-    const endTime = new Date(end).getTime();
-
-    for (let time = startTime; time <= endTime; time += 24 * 60 * 60 * 1000) {
-      const date = new Date(time).toISOString().split("T")[0];
-      marked[date] = {
-        color: "#E3F2FD",
-        textColor: "#007AFF",
-        startingDay: date === start,
-        endingDay: date === end,
-      };
-    }
-
-    return marked;
-  };
-
-  const onDayPress = (day: DateData) => {
-    if (!startDate || (startDate && endDate)) {
-      setStartDate(day.dateString);
-      setEndDate("");
-      setMarkedDates({
-        [day.dateString]: {
-          color: "#007AFF",
-          textColor: "#FFFFFF",
-          startingDay: true,
-          endingDay: true,
-        },
-      });
-    } else if (startDate && !endDate) {
-      const start = new Date(startDate).getTime();
-      const end = new Date(day.dateString).getTime();
-
-      if (end < start) {
-        const newMarked = markPeriod(day.dateString, startDate);
-        setStartDate(day.dateString);
-        setEndDate(startDate);
-        setMarkedDates(newMarked);
-      } else {
-        const newMarked = markPeriod(startDate, day.dateString);
-        setEndDate(day.dateString);
-        setMarkedDates(newMarked);
-      }
-    }
-  };
-
-  return (
-    <ScrollView style={styles.container}>
-      <CalendarList
-        horizontal={true}
-        pagingEnabled={true}
-        calendarWidth={calendarWidth}
-        onDayPress={onDayPress}
-        markingType={"period"}
-        markedDates={markedDates}
-        theme={{
-          calendarBackground: "#FFFFFF",
-          textSectionTitleColor: "#666666",
-          todayTextColor: "#007AFF",
-          dayTextColor: "#2D4150",
-        }}
-        style={styles.calendar}
-      />
-
-      <View style={styles.selectionInfo}>
-        {startDate && <Text style={styles.date}>開始日: {startDate}</Text>}
-        {endDate && <Text style={styles.date}>終了日: {endDate}</Text>}
-      </View>
-    </ScrollView>
-  );
-};
-
-// メインのカレンダーコンポーネント
-const CalendarComponent = () => {
-  const [selectedType, setSelectedType] = useState<CalendarType>("basic");
-
-  const renderCalendar = () => {
-    switch (selectedType) {
-      case "basic":
-        return <BasicCalendarView />;
-      case "agenda":
-        return <AgendaView />;
-      case "period":
-        return <PeriodView />;
-    }
-  };
-
-  // SafeAreaView は app.tsx 側で当てているので、ここでは通常の View にする
-  return (
-    <View style={styles.root}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, selectedType === "basic" && styles.activeTab]}
-          onPress={() => setSelectedType("basic")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              selectedType === "basic" && styles.activeTabText,
-            ]}
-          >
-            基本
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedType === "agenda" && styles.activeTab]}
-          onPress={() => setSelectedType("agenda")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              selectedType === "agenda" && styles.activeTabText,
-            ]}
-          >
-            アジェンダ
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedType === "period" && styles.activeTab]}
-          onPress={() => setSelectedType("period")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              selectedType === "period" && styles.activeTabText,
-            ]}
-          >
-            期間選択
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.dayHeader}>
+        <Text style={styles.dayTitle}>{formatDateLabel(selected)}</Text>
+        {loading ? <ActivityIndicator /> : null}
       </View>
 
-      {selectedType === "agenda" ? (
-        <View style={{ flex: 1 }}>{renderCalendar()}</View>
+      {accounts.length === 0 && !loading ? (
+        <Text style={styles.empty}>
+          「アカウント」タブから Google
+          アカウントを連携すると、ここに予定が表示されます。
+        </Text>
+      ) : dayEvents.length === 0 && !loading ? (
+        <Text style={styles.empty}>予定はありません</Text>
       ) : (
-        renderCalendar()
+        dayEvents.map((event) => (
+          <EventRow
+            key={`${event.accountId}:${event.id}`}
+            event={event}
+            color={colors.get(event.accountId) ?? "#999999"}
+            accountLabel={accountLabel(event)}
+          />
+        ))
       )}
+    </ScrollView>
+  );
+}
+
+function EventRow({
+  event,
+  color,
+  accountLabel,
+}: {
+  event: UnifiedEvent;
+  color: string;
+  accountLabel: string;
+}) {
+  const time = event.allDay
+    ? "終日"
+    : `${formatTime(event.start)}〜${formatTime(event.end)}`;
+  return (
+    <View
+      style={[
+        styles.eventRow,
+        { borderLeftColor: color },
+        event.isMirror && styles.eventRowMirror,
+      ]}
+    >
+      <Text style={styles.eventTime}>{time}</Text>
+      <View style={styles.eventMain}>
+        <Text
+          style={[styles.eventTitle, event.isMirror && styles.eventTitleMirror]}
+          numberOfLines={2}
+        >
+          {event.summary}
+        </Text>
+        <View style={styles.eventMeta}>
+          <Text style={[styles.eventAccount, { color }]}>{accountLabel}</Text>
+          {event.isMirror ? (
+            <Text style={styles.mirrorBadge}>ミラー</Text>
+          ) : null}
+          {event.eventType === "outOfOffice" ? (
+            <Text style={styles.oooBadge}>不在</Text>
+          ) : null}
+          {event.hangoutLink ? (
+            <Text style={styles.meetBadge}>Meet</Text>
+          ) : null}
+        </View>
+      </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-  },
   container: {
     flex: 1,
     backgroundColor: "#F8F9FA",
   },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 5,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginHorizontal: 5,
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: "#007AFF",
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#666",
-  },
-  activeTabText: {
-    color: "#FFFFFF",
+  content: {
+    padding: 16,
+    paddingBottom: 40,
   },
   calendar: {
-    marginHorizontal: CALENDAR_HORIZONTAL_MARGIN,
-    marginTop: 20,
     borderRadius: 10,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  agenda: {
-    flex: 1,
-  },
-  selectedInfo: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    padding: 15,
-    backgroundColor: "#E3F2FD",
-    borderRadius: 8,
-  },
-  selectedDate: {
-    fontSize: 16,
-    textAlign: "center",
-    color: "#007AFF",
-    fontWeight: "500",
-  },
-  selectionInfo: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    padding: 20,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-  },
-  date: {
-    fontSize: 16,
-    color: "#007AFF",
-    marginBottom: 5,
+    paddingBottom: 8,
   },
   legend: {
-    marginHorizontal: 20,
-    marginTop: 25,
-    padding: 20,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-  },
-  legendTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#333",
-  },
-  legendItems: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 12,
+    paddingHorizontal: 4,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-    width: "48%",
-    marginBottom: 10,
+    maxWidth: "48%",
   },
   dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
   },
   legendText: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  error: {
+    marginTop: 12,
+    color: "#D0342C",
     fontSize: 14,
-    color: "#666",
   },
-  item: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    padding: 15,
-    marginRight: 10,
-    marginTop: 10,
-    borderLeftWidth: 4,
+  warning: {
+    marginTop: 8,
+    color: "#E65100",
+    fontSize: 12,
   },
-  itemContent: {
-    flex: 1,
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 20,
+    marginBottom: 8,
   },
-  itemTitle: {
+  dayTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
-    marginBottom: 5,
+    color: "#2D4150",
   },
-  itemDetails: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  itemTime: {
+  empty: {
+    color: "#999999",
     fontSize: 14,
-    color: "#007AFF",
-  },
-  itemDuration: {
-    fontSize: 14,
-    color: "#666",
-  },
-  emptyDate: {
-    height: 80,
-    paddingTop: 30,
-  },
-  emptyDateText: {
-    fontSize: 14,
-    color: "#999",
+    paddingVertical: 16,
     textAlign: "center",
   },
+  eventRow: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 8,
+  },
+  eventRowMirror: {
+    opacity: 0.7,
+    backgroundColor: "#F3F4F6",
+  },
+  eventTime: {
+    width: 92,
+    fontSize: 12,
+    color: "#666666",
+    paddingTop: 2,
+  },
+  eventMain: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#2D4150",
+  },
+  eventTitleMirror: {
+    fontWeight: "400",
+  },
+  eventMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+    alignItems: "center",
+  },
+  eventAccount: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  mirrorBadge: {
+    fontSize: 11,
+    color: "#666666",
+    backgroundColor: "#E5E7EB",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  oooBadge: {
+    fontSize: 11,
+    color: "#7C3AED",
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  meetBadge: {
+    fontSize: 11,
+    color: "#047857",
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
 });
-
-export default CalendarComponent;

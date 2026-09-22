@@ -11,12 +11,11 @@ import {
 } from "react-native";
 import * as Linking from "expo-linking";
 
-import { openAuthSession, useAuth } from "../auth/AuthProvider";
+import { openAuthSession } from "../auth/AuthProvider";
 import { api, describeApiError, type LinkedAccount } from "../lib/api";
 import { describeAuthError } from "../lib/errorMessages";
 
 export default function AccountsScreen() {
-  const { user, signOut } = useAuth();
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,13 +136,6 @@ export default function AccountsScreen() {
                   Google アカウントを追加
                 </Text>
               )}
-            </Pressable>
-
-            <Text style={styles.signedInAs}>
-              ログイン中: {user?.email ?? user?.uid}
-            </Text>
-            <Pressable onPress={signOut} accessibilityRole="button">
-              <Text style={styles.signOut}>ログアウト</Text>
             </Pressable>
           </View>
         }
@@ -294,15 +286,5 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
-  },
-  signedInAs: {
-    marginTop: 28,
-    fontSize: 12,
-    color: "#999999",
-  },
-  signOut: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#007AFF",
   },
 });

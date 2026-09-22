@@ -17,9 +17,11 @@ import { PrimaryButton } from "../components/form";
 import {
   api,
   describeApiError,
+  describeSyncSummary,
   type LinkedAccount,
   type SyncRule,
 } from "../lib/api";
+import { formatDateTime } from "../lib/dates";
 import {
   groupRulesByPair,
   ruleToInput,
@@ -35,7 +37,21 @@ export default function RulesListScreen({ navigation }: Props) {
   const [rules, setRules] = useState<SyncRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { summary } = await api.syncAll();
+      Alert.alert("同期が完了しました", describeSyncSummary(summary));
+      await load();
+    } catch (caught) {
+      Alert.alert("同期できませんでした", describeApiError(caught));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -156,6 +172,18 @@ export default function RulesListScreen({ navigation }: Props) {
             title="同期設定を追加"
             onPress={() => navigation.navigate("RuleEditor", {})}
           />
+          {rules.length > 0 ? (
+            <Pressable
+              style={styles.syncNow}
+              onPress={syncNow}
+              disabled={syncing}
+              accessibilityRole="button"
+            >
+              <Text style={styles.syncNowText}>
+                {syncing ? "同期中..." : "今すぐ同期（全設定）"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </ScrollView>
@@ -241,6 +269,9 @@ function DirectionRow({
       <View style={styles.rowMain}>
         <Text style={styles.rowTitle}>{direction}</Text>
         <Text style={styles.rowMeta}>{summarizeRule(rule)}</Text>
+        <Text style={styles.rowMeta}>
+          最終同期: {formatDateTime(rule.lastSyncAt)}
+        </Text>
         {rule.lastError ? (
           <Text style={styles.rowError}>エラー: {rule.lastError}</Text>
         ) : null}
@@ -336,5 +367,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 8,
+  },
+  syncNow: {
+    marginTop: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  syncNowText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

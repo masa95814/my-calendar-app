@@ -15,4 +15,5 @@ export type TabParamList = {
   Calendar: undefined;
   Rules: undefined;
   Accounts: undefined;
+  Settings: undefined;
 };
