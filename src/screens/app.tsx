@@ -10,10 +10,11 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AuthProvider, useAuth } from "../auth/AuthProvider";
 import type { RulesStackParamList, TabParamList } from "../navigation/types";
 import AccountsScreen from "./accounts";
-import CalendarComponent from "./calendar";
+import CalendarScreen from "./calendar";
 import LoginScreen from "./login";
 import RuleEditorScreen from "./ruleEditor";
 import RulesListScreen from "./rules";
+import SettingsScreen from "./settings";
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const RulesStack = createNativeStackNavigator<RulesStackParamList>();
@@ -48,7 +49,7 @@ function MainTabs() {
       >
         <Tab.Screen
           name="Calendar"
-          component={CalendarComponent}
+          component={CalendarScreen}
           options={{
             title: "カレンダー",
             tabBarIcon: ({ color, size }) => (
@@ -79,6 +80,16 @@ function MainTabs() {
             title: "アカウント",
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="people-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            title: "設定",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="settings-outline" color={color} size={size} />
             ),
           }}
         />

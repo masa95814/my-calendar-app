@@ -95,6 +95,55 @@ export type SyncRule = Omit<RuleInput, "name"> & {
   lastError: string | null;
 };
 
+/** 同期の実行結果 */
+export type SyncSummary = {
+  calendars: number;
+  processed: number;
+  created: number;
+  updated: number;
+  deleted: number;
+  skipped: number;
+  errors: string[];
+};
+
+/** 統合カレンダー表示の 1 件（server/src/services/sync.ts の UnifiedEvent と同じ形） */
+export type UnifiedEvent = {
+  accountId: string;
+  accountEmail: string;
+  id: string;
+  summary: string;
+  /** dateTime（オフセット付き）または終日の date */
+  start: string;
+  end: string;
+  allDay: boolean;
+  eventType: string;
+  isMirror: boolean;
+  mirrorRuleId: string | null;
+  hangoutLink: string | null;
+};
+
+export type StatusResponse = {
+  now: string;
+  accounts: (Omit<LinkedAccount, "calendars"> & { calendarCount: number })[];
+  rules: {
+    id: string;
+    name: string;
+    enabled: boolean;
+    sourceAccountId: string;
+    targetAccountId: string;
+    lastSyncAt: string | null;
+    lastError: string | null;
+  }[];
+  syncStates: {
+    accountId: string;
+    calendarId: string;
+    lastFullSyncAt: string | null;
+    lastIncrementalSyncAt: string | null;
+    watchActive: boolean;
+    channelExpiresAt: string | null;
+  }[];
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = auth.currentUser;
   if (!user) {
@@ -164,7 +213,47 @@ export const api = {
     request<void>(`/api/rules/${encodeURIComponent(ruleId)}`, {
       method: "DELETE",
     }),
+
+  /** 1 つの同期設定を手動で全件同期 */
+  syncRule: (ruleId: string) =>
+    request<{ rule: SyncRule; summary: SyncSummary }>(
+      `/api/rules/${encodeURIComponent(ruleId)}/sync`,
+      { method: "POST" },
+    ),
+
+  /** すべての同期設定を手動で全件同期 */
+  syncAll: () =>
+    request<{ summary: SyncSummary }>("/api/sync", { method: "POST" }),
+
+  /** 統合カレンダー表示用の予定（期間は 62 日以内） */
+  listEvents: (from: Date, to: Date) =>
+    request<{ events: UnifiedEvent[]; errors: string[] }>(
+      `/api/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
+    ),
+
+  status: () => request<StatusResponse>("/api/status"),
+
+  /** そのアカウントのミラー予定を対応表の有無に関わらず一括削除（復旧用） */
+  purgeMirrors: (accountId: string) =>
+    request<{ deletedEvents: number; deletedRecords: number }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/purge-mirrors`,
+      { method: "POST" },
+    ),
 };
+
+/** 同期結果を 1 行の文言にする */
+export function describeSyncSummary(summary: SyncSummary): string {
+  const parts = [
+    `作成 ${summary.created}`,
+    `更新 ${summary.updated}`,
+    `削除 ${summary.deleted}`,
+    `対象外 ${summary.skipped}`,
+  ];
+  const base = `${summary.processed} 件を処理（${parts.join("、")}）`;
+  return summary.errors.length > 0
+    ? `${base}\nエラー:\n${summary.errors.join("\n")}`
+    : base;
+}
 
 /** ログイン開始 URL（認証不要。ブラウザで開く） */
 export function loginStartUrl(returnTo: string): string {
