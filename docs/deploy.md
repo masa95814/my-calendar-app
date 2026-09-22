@@ -74,3 +74,18 @@ cd server
 | `Billing account ... is not found`                        | プロジェクトに請求先アカウントがリンクされていない。`gcloud billing projects link <PROJECT> --billing-account=<ID>` |
 | ビルドで `PERMISSION_DENIED ... could not resolve source` | 実行サービスアカウントに `roles/cloudbuild.builds.builder` が無い（スクリプトで付与済み）                           |
 | `/healthz` が Google の 404 ページになる                  | Cloud Run は末尾が z のパスを予約している。`/health` を使う                                                         |
+
+## ホームページとプライバシーポリシー
+
+OAuth 同意画面を本番環境にするには、ブランディングにホームページとプライバシーポリシーの URL が必要です。`hosting/public/` のページを Firebase Hosting（既定のサイト）に公開しています。
+
+```bash
+./hosting/deploy.sh my-calendar-app-509416
+```
+
+| ページ               | URL                                              |
+| -------------------- | ------------------------------------------------ |
+| ホームページ         | `https://my-calendar-app-509416.web.app`         |
+| プライバシーポリシー | `https://my-calendar-app-509416.web.app/privacy` |
+
+検索エンジンに載らないよう、`robots.txt`（全ページ拒否）、各ページの `<meta name="robots">`、`X-Robots-Tag` ヘッダーの 3 つで `noindex` を指定しています。
