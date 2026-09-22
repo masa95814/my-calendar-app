@@ -82,7 +82,7 @@ interface MarkedDates {
     selectedColor?: string;
     selectedTextColor?: string;
     dotColor?: string;
-    dots?: Array<{ key: string; color: string }>;
+    dots?: { key: string; color: string }[];
     disabled?: boolean;
     disableTouchEvent?: boolean;
     customStyles?: {
