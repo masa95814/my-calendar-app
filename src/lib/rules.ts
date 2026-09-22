@@ -32,6 +32,25 @@ export const VISIBILITY_LABELS: Record<Visibility, string> = {
   default: "カレンダーの既定",
 };
 
+/** Google カレンダーの予定の色（ID と表示名、見本の色） */
+export const EVENT_COLORS: readonly {
+  id: string;
+  label: string;
+  hex: string;
+}[] = [
+  { id: "11", label: "トマト", hex: "#D50000" },
+  { id: "4", label: "フラミンゴ", hex: "#E67C73" },
+  { id: "6", label: "ミカン", hex: "#F4511E" },
+  { id: "5", label: "バナナ", hex: "#F6BF26" },
+  { id: "2", label: "セージ", hex: "#33B679" },
+  { id: "10", label: "バジル", hex: "#0B8043" },
+  { id: "7", label: "ピーコック", hex: "#039BE5" },
+  { id: "9", label: "ブルーベリー", hex: "#3F51B5" },
+  { id: "1", label: "ラベンダー", hex: "#7986CB" },
+  { id: "3", label: "ブドウ", hex: "#8E24AA" },
+  { id: "8", label: "グラファイト", hex: "#616161" },
+];
+
 export const WINDOW_DAYS_OPTIONS = [30, 60, 90] as const;
 
 export const DEFAULT_DECLINE_MESSAGE = "別件の予定があるため参加できません。";
@@ -78,6 +97,7 @@ export function defaultRuleInput(
       copyDescription: false,
       copyLocation: false,
       visibility: "public",
+      colorId: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: DEFAULT_DECLINE_MESSAGE,
@@ -98,7 +118,8 @@ export function ruleToInput(rule: SyncRule): RuleInput {
       excludeKeywords: [...rule.filters.excludeKeywords],
       includeKeywords: [...rule.filters.includeKeywords],
     },
-    output: { ...rule.output },
+    // 色の項目が追加される前に保存された設定は、色が未設定（既定）として扱う
+    output: { ...rule.output, colorId: rule.output.colorId ?? null },
   };
 }
 

@@ -13,6 +13,25 @@ export const autoDeclineModeSchema = z.enum([
   "declineAllConflictingInvitations",
 ]);
 
+/**
+ * ミラー予定の色（Google カレンダーの予定の色 ID "1"〜"11"）。null は同期先カレンダーの既定の色
+ * 1 ラベンダー / 2 セージ / 3 ブドウ / 4 フラミンゴ / 5 バナナ / 6 ミカン /
+ * 7 ピーコック / 8 グラファイト / 9 ブルーベリー / 10 バジル / 11 トマト
+ */
+export const eventColorIdSchema = z.enum([
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10",
+  "11",
+]);
+
 export const allDaySourceHandlingSchema = z.enum(["fullDay", "skip"]);
 /** ミラー予定の公開設定（Google Calendar の visibility）。default は同期先カレンダーの既定に従う */
 export const visibilitySchema = z.enum(["public", "private", "default"]);
@@ -49,6 +68,8 @@ export const ruleOutputSchema = z.object({
   copyDescription: z.boolean().default(false),
   copyLocation: z.boolean().default(false),
   visibility: visibilitySchema.default("public"),
+  /** ミラー予定の色。null は同期先カレンダーの既定の色 */
+  colorId: eventColorIdSchema.nullable().default(null),
   /** 終日の元予定を 0:00〜24:00 の時間指定に変換するか、同期しないか */
   allDaySourceHandling: allDaySourceHandlingSchema.default("fullDay"),
   /** 不在のみ有効 */
