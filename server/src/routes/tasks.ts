@@ -20,7 +20,9 @@ export type TaskRouteDeps = {
 export function taskRoutes(deps: TaskRouteDeps) {
   const app = new Hono();
 
-  app.use("*", async (c, next) => {
+  // このサブアプリは "/" にマウントされるため、"*" にすると他のすべてのルートにも掛かってしまう。
+  // 必ず /tasks/* に限定する
+  app.use("/tasks/*", async (c, next) => {
     const secret = deps.config.TASKS_SECRET;
     if (secret && c.req.header("X-Tasks-Secret") !== secret) {
       return c.json({ error: "unauthorized" }, 401);
