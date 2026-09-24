@@ -86,7 +86,7 @@ export function createApp(deps: AppDependencies) {
         /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
           ? origin
           : null,
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowHeaders: ["Authorization", "Content-Type"],
       maxAge: 600,
     }),
