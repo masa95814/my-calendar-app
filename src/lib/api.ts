@@ -75,6 +75,8 @@ export type RuleOutput = {
   colorId: string | null;
   /** ミラー予定の長さの上限（分）。null は上限なし */
   maxDurationMinutes: number | null;
+  /** 長さの上限をかける予定のキーワード（タイトル）。空なら全部の予定 */
+  maxDurationKeywords: string[];
   allDaySourceHandling: AllDaySourceHandling;
   autoDeclineMode: AutoDeclineMode;
   declineMessage: string;

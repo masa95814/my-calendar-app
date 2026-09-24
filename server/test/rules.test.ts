@@ -123,6 +123,7 @@ describe("POST /api/rules", () => {
       visibility: "public",
       colorId: null,
       maxDurationMinutes: null,
+      maxDurationKeywords: [],
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",

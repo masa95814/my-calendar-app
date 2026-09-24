@@ -58,6 +58,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
   const [excludeText, setExcludeText] = useState("");
   const [includeText, setIncludeText] = useState("");
   const [alwaysText, setAlwaysText] = useState("");
+  const [capText, setCapText] = useState("");
   const [alsoReverse, setAlsoReverse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -95,6 +96,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         setExcludeText(initial.filters.excludeKeywords.join(", "));
         setIncludeText(initial.filters.includeKeywords.join(", "));
         setAlwaysText(initial.filters.alwaysIncludeKeywords.join(", "));
+        setCapText(initial.output.maxDurationKeywords.join(", "));
       } catch (caught) {
         if (!cancelled) {
           setLoadError(describeApiError(caught));
@@ -204,6 +206,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
     output: {
       ...input.output,
       title: input.output.title.trim() || OUTPUT_KIND_LABELS[input.output.kind],
+      maxDurationKeywords: parseKeywords(capText),
     },
   });
 
@@ -538,6 +541,19 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
               }
             />
           </Field>
+          {input.output.maxDurationMinutes !== null ? (
+            <Field
+              label="上限をかける予定"
+              help="カンマ区切り。タイトルにいずれかを含む予定だけに上限を使います。空欄ならすべての予定に使います"
+            >
+              <TextField
+                value={capText}
+                onChangeText={setCapText}
+                placeholder="例: 定例（空欄ならすべて）"
+                autoCapitalize="none"
+              />
+            </Field>
+          ) : null}
           <Field
             label="予定の色"
             help="同期先の Google カレンダーでミラー予定を表示する色です"
