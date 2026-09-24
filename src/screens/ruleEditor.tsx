@@ -522,6 +522,23 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
             onValueChange={(copyLocation) => updateOutput({ copyLocation })}
           />
           <Field
+            label="長さの上限"
+            help="元の予定がこれより長いときは、開始からこの長さまでを埋めます（例: 1 時間で入っているが実際は 30 分で終わる定例）。終日の予定には効きません"
+          >
+            <Choice
+              options={[
+                { value: 0, label: "上限なし" },
+                { value: 30, label: "30 分" },
+                { value: 45, label: "45 分" },
+                { value: 60, label: "1 時間" },
+              ]}
+              value={input.output.maxDurationMinutes ?? 0}
+              onChange={(n) =>
+                updateOutput({ maxDurationMinutes: n === 0 ? null : n })
+              }
+            />
+          </Field>
+          <Field
             label="予定の色"
             help="同期先の Google カレンダーでミラー予定を表示する色です"
           >

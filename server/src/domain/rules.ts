@@ -75,6 +75,17 @@ export const ruleOutputSchema = z.object({
   visibility: visibilitySchema.default("public"),
   /** ミラー予定の色。null は同期先カレンダーの既定の色 */
   colorId: eventColorIdSchema.nullable().default(null),
+  /**
+   * ミラー予定の長さの上限（分）。元予定がこれより長ければ終了を「開始 + 上限」にする
+   * （例: 1 時間で入っているが実際は 30 分で終わる定例）。終日の予定には使わない。null は上限なし
+   */
+  maxDurationMinutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(1440)
+    .nullable()
+    .default(null),
   /** 終日の元予定を 0:00〜24:00 の時間指定に変換するか、同期しないか */
   allDaySourceHandling: allDaySourceHandlingSchema.default("fullDay"),
   /** 不在のみ有効 */

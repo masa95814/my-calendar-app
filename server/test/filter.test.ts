@@ -32,6 +32,7 @@ function rule(overrides: Partial<SyncRule> = {}): SyncRule {
       copyLocation: false,
       visibility: "private",
       colorId: null,
+      maxDurationMinutes: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "",

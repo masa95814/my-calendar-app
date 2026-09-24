@@ -73,6 +73,8 @@ export type RuleOutput = {
   visibility: Visibility;
   /** Google カレンダーの予定の色 ID（"1"〜"11"）。null は同期先カレンダーの既定の色 */
   colorId: string | null;
+  /** ミラー予定の長さの上限（分）。null は上限なし */
+  maxDurationMinutes: number | null;
   allDaySourceHandling: AllDaySourceHandling;
   autoDeclineMode: AutoDeclineMode;
   declineMessage: string;
