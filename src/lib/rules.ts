@@ -99,6 +99,7 @@ export function defaultRuleInput(
       copyLocation: false,
       visibility: "public",
       colorId: null,
+      maxDurationMinutes: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: DEFAULT_DECLINE_MESSAGE,
@@ -121,8 +122,12 @@ export function ruleToInput(rule: SyncRule): RuleInput {
       // 例外キーワードが追加される前に保存された設定は、空として扱う
       alwaysIncludeKeywords: [...(rule.filters.alwaysIncludeKeywords ?? [])],
     },
-    // 色の項目が追加される前に保存された設定は、色が未設定（既定）として扱う
-    output: { ...rule.output, colorId: rule.output.colorId ?? null },
+    // 色や長さの上限の項目が追加される前に保存された設定は、未設定として扱う
+    output: {
+      ...rule.output,
+      colorId: rule.output.colorId ?? null,
+      maxDurationMinutes: rule.output.maxDurationMinutes ?? null,
+    },
   };
 }
 
@@ -180,6 +185,9 @@ export function summarizeRule(rule: SyncRule): string {
   const always = rule.filters.alwaysIncludeKeywords ?? [];
   if (always.length > 0) {
     parts.push(`例外「${always.join("・")}」`);
+  }
+  if (rule.output.maxDurationMinutes) {
+    parts.push(`最長 ${rule.output.maxDurationMinutes} 分`);
   }
   parts.push(`${rule.windowDays} 日先まで`);
   return parts.join("・");

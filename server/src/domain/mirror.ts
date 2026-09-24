@@ -59,7 +59,13 @@ export function buildMirrorEvent(
     // dateTime にはオフセット（+09:00）が含まれるので、タイムゾーン名は写さない
     // （Google が元予定に付ける名前が Asia/Dili のように不自然なことがある）
     start = { dateTime: event.start?.dateTime ?? null };
-    end = { dateTime: event.end?.dateTime ?? null };
+    end = {
+      dateTime: capEnd(
+        event.start?.dateTime,
+        event.end?.dateTime,
+        rule.output.maxDurationMinutes ?? null,
+      ),
+    };
   }
 
   const descriptionParts: string[] = [];
@@ -110,6 +116,34 @@ export function buildMirrorEvent(
   }
 
   return body;
+}
+
+/**
+ * 長さの上限を超える予定の終了時刻を「開始 + 上限」にする。
+ * 結果は開始と同じオフセット（+09:00 など）の書式で返す
+ */
+export function capEnd(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  maxMinutes: number | null,
+): string | null {
+  if (!start || !end || maxMinutes === null) {
+    return end ?? null;
+  }
+  const startMs = new Date(start).getTime();
+  const capMs = startMs + maxMinutes * 60 * 1000;
+  if (Number.isNaN(startMs) || new Date(end).getTime() <= capMs) {
+    return end;
+  }
+  const offset = /([+-])(\d{2}):(\d{2})$/.exec(start);
+  if (!offset) {
+    return new Date(capMs).toISOString().replace(".000Z", "Z");
+  }
+  const sign = offset[1] === "-" ? -1 : 1;
+  const offsetMs =
+    sign * (Number(offset[2]) * 60 + Number(offset[3])) * 60 * 1000;
+  const local = new Date(capMs + offsetMs).toISOString().slice(0, 19);
+  return `${local}${offset[0]}`;
 }
 
 /** 更新が必要かを判定するための指紋。表示に関わる項目だけを含める */
