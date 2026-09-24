@@ -316,7 +316,11 @@ function fromRuleDoc(id: string, data: DocumentData): SyncRule {
     source: data.source as SyncRule["source"],
     target: data.target as SyncRule["target"],
     windowDays: Number(data.windowDays ?? 60),
-    filters: data.filters as SyncRule["filters"],
+    // 例外キーワードが追加される前に保存された設定は、空として扱う
+    filters: {
+      alwaysIncludeKeywords: [],
+      ...(data.filters as Partial<SyncRule["filters"]>),
+    } as SyncRule["filters"],
     output: data.output as SyncRule["output"],
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
