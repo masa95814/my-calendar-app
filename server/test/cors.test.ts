@@ -22,6 +22,25 @@ describe("CORS（Web 版アプリ）", () => {
     );
   });
 
+  it("アプリが使うメソッド（PATCH を含む）をすべて許可する", async () => {
+    const h = buildTestApp();
+    const res = await h.app.request("/api/accounts/sub-1", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:8081",
+        "Access-Control-Request-Method": "PATCH",
+        "Access-Control-Request-Headers": "authorization,content-type",
+      },
+    });
+    expect(res.status).toBe(204);
+    const allowed = (res.headers.get("access-control-allow-methods") ?? "")
+      .split(",")
+      .map((m) => m.trim());
+    expect(allowed).toEqual(
+      expect.arrayContaining(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+    );
+  });
+
   it("許可したオリジンの実リクエストに CORS ヘッダーを付ける", async () => {
     const h = buildTestApp({
       env: { WEB_ALLOWED_ORIGINS: "https://app.example.com" },
