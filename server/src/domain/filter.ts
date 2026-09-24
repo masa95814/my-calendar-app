@@ -124,6 +124,14 @@ export function evaluateEvent(
     return no("transparent");
   }
 
+  // 除外キーワードと例外キーワードはタイトルだけで判定する。説明文まで見ると、会議リンク（Teams の …@thread.v2 など）や
+  // 署名に含まれる文字で意図せず除外されてしまうため
+  const title = (event.summary ?? "").toLowerCase();
+  const titleHas = (keywords: string[]) =>
+    keywords.some((keyword) => title.includes(keyword.toLowerCase()));
+  // 例外キーワードに当たる予定は、参加者数・会議リンク・包含キーワードの条件を飛ばす（例: 1 人で入れた「面談」）
+  const always = titleHas(rule.filters.alwaysIncludeKeywords ?? []);
+
   // 会議室などのリソースは参加者に数えない
   const attendees = (event.attendees ?? []).filter((a) => !a.resource);
   const self = attendees.find((a) => a.self);
@@ -139,29 +147,23 @@ export function evaluateEvent(
       return no("tentative");
     }
   }
-  if (rule.filters.minAttendees !== null) {
+  if (!always && rule.filters.minAttendees !== null) {
     // 参加者情報が無い予定は自分ひとりの予定として数える
     const count = attendees.length > 0 ? attendees.length : 1;
     if (count < rule.filters.minAttendees) {
       return no("attendees");
     }
   }
-  if (rule.filters.requireMeetLink && !hasConferenceLink(event)) {
+  if (!always && rule.filters.requireMeetLink && !hasConferenceLink(event)) {
     return no("no_conference_link");
   }
 
-  // 除外キーワードはタイトルだけで判定する。説明文まで見ると、会議リンク（Teams の …@thread.v2 など）や
-  // 署名に含まれる文字で意図せず除外されてしまうため
-  const title = (event.summary ?? "").toLowerCase();
-  const text = `${title}\n${event.description ?? ""}`.toLowerCase();
-  if (
-    rule.filters.excludeKeywords.some((keyword) =>
-      title.includes(keyword.toLowerCase()),
-    )
-  ) {
+  if (titleHas(rule.filters.excludeKeywords)) {
     return no("exclude_keyword");
   }
+  const text = `${title}\n${event.description ?? ""}`.toLowerCase();
   if (
+    !always &&
     rule.filters.includeKeywords.length > 0 &&
     !rule.filters.includeKeywords.some((keyword) =>
       text.includes(keyword.toLowerCase()),

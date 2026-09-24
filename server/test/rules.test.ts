@@ -109,6 +109,7 @@ describe("POST /api/rules", () => {
       requireMeetLink: false,
       excludeKeywords: [],
       includeKeywords: [],
+      alwaysIncludeKeywords: [],
       excludeAllDay: true,
       excludeTransparent: true,
       excludeDeclined: true,

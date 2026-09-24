@@ -41,6 +41,7 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       requireMeetLink: false,
       excludeKeywords: [],
       includeKeywords: [],
+      alwaysIncludeKeywords: [],
       excludeAllDay: false,
       excludeTransparent: true,
       excludeDeclined: true,

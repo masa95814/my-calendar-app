@@ -57,6 +57,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
   // キーワードは入力中はそのままの文字列で持ち、保存時に配列にする
   const [excludeText, setExcludeText] = useState("");
   const [includeText, setIncludeText] = useState("");
+  const [alwaysText, setAlwaysText] = useState("");
   const [alsoReverse, setAlsoReverse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,6 +94,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         setInput(initial);
         setExcludeText(initial.filters.excludeKeywords.join(", "));
         setIncludeText(initial.filters.includeKeywords.join(", "));
+        setAlwaysText(initial.filters.alwaysIncludeKeywords.join(", "));
       } catch (caught) {
         if (!cancelled) {
           setLoadError(describeApiError(caught));
@@ -197,6 +199,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
       ...input.filters,
       excludeKeywords: parseKeywords(excludeText),
       includeKeywords: parseKeywords(includeText),
+      alwaysIncludeKeywords: parseKeywords(alwaysText),
     },
     output: {
       ...input.output,
@@ -421,6 +424,17 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
               value={includeText}
               onChangeText={setIncludeText}
               placeholder="空欄なら条件なし"
+              autoCapitalize="none"
+            />
+          </Field>
+          <Field
+            label="例外で同期するキーワード"
+            help="カンマ区切り。タイトルにいずれかを含む予定は、参加者数・会議リンク・包含キーワードの条件に合わなくても同期します（除外キーワードは優先します）"
+          >
+            <TextField
+              value={alwaysText}
+              onChangeText={setAlwaysText}
+              placeholder="例: 面談"
               autoCapitalize="none"
             />
           </Field>

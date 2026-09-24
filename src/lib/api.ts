@@ -57,6 +57,8 @@ export type RuleFilters = {
   requireMeetLink: boolean;
   excludeKeywords: string[];
   includeKeywords: string[];
+  /** タイトルにいずれかを含む予定は、参加者数・会議リンク・包含キーワードの条件を飛ばして同期する */
+  alwaysIncludeKeywords: string[];
   excludeAllDay: boolean;
   excludeTransparent: boolean;
   excludeDeclined: boolean;
