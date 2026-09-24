@@ -267,7 +267,10 @@ function DirectionRow({
       accessibilityRole="button"
     >
       <View style={styles.rowMain}>
-        <Text style={styles.rowTitle}>{direction}</Text>
+        <Text style={styles.rowTitle}>{rule.name || direction}</Text>
+        {rule.name && rule.name !== direction ? (
+          <Text style={styles.rowMeta}>{direction}</Text>
+        ) : null}
         <Text style={styles.rowMeta}>{summarizeRule(rule)}</Text>
         <Text style={styles.rowMeta}>
           最終同期: {formatDateTime(rule.lastSyncAt)}
