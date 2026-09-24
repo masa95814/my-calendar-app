@@ -186,6 +186,8 @@ async function handleLink(
     id: identity.sub,
     email: identity.email.toLowerCase(),
     ...(identity.hd ? { hd: identity.hd } : {}),
+    // 再連携しても、付けた呼び名は保つ
+    ...(existing?.label ? { label: existing.label } : {}),
     // hd（Workspace のドメイン）が付いていれば Workspace アカウント
     type: identity.hd ? "workspace" : "personal",
     refreshTokenEnc: deps.cipher.encrypt(tokens.refreshToken),

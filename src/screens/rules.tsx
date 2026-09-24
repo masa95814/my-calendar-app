@@ -13,6 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { PrimaryButton } from "../components/form";
+import { accountName } from "../lib/accounts";
 import {
   api,
   describeApiError,
@@ -23,10 +24,12 @@ import {
 import { formatDateTime } from "../lib/dates";
 import { notify } from "../lib/dialog";
 import {
-  groupRulesByPair,
+  defaultRuleName,
+  orphanRules,
   ruleToInput,
   summarizeRule,
-  type AccountPair,
+  targetsForSource,
+  type TargetEntry,
 } from "../lib/rules";
 import type { RulesStackParamList } from "../navigation/types";
 
@@ -39,6 +42,7 @@ export default function RulesListScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState<string | null>(null);
 
   const syncNow = async () => {
     setSyncing(true);
@@ -99,7 +103,13 @@ export default function RulesListScreen({ navigation }: Props) {
     );
   }
 
-  const { pairs, orphans } = groupRulesByPair(rules, accounts);
+  const orphans = orphanRules(rules, accounts);
+  // 選んだ同期元が無ければ（初回・連携解除後）、同期設定のあるアカウントか先頭を選ぶ
+  const source =
+    accounts.find((a) => a.id === sourceId) ??
+    accounts.find((a) => rules.some((r) => r.source.accountId === a.id)) ??
+    accounts[0];
+  const targets = source ? targetsForSource(source, rules, accounts) : [];
 
   return (
     <ScrollView
@@ -124,25 +134,77 @@ export default function RulesListScreen({ navigation }: Props) {
         </Text>
       ) : (
         <Text style={styles.intro}>
-          アカウントの組み合わせごとに、方向別の同期設定を持てます。「A → B」は
-          A の予定を B のカレンダーに反映します。
+          同期元を選ぶと、その予定をどのアカウントに反映しているかが見られます。
         </Text>
       )}
 
-      {pairs.map((pair) => (
-        <PairCard
-          key={pair.key}
-          pair={pair}
-          onEdit={(ruleId) => navigation.navigate("RuleEditor", { ruleId })}
-          onCreate={(sourceAccountId, targetAccountId) =>
-            navigation.navigate("RuleEditor", {
-              sourceAccountId,
-              targetAccountId,
-            })
-          }
-          onToggle={toggleEnabled}
-        />
-      ))}
+      {accounts.length >= 2 && source ? (
+        <>
+          <Text style={styles.label}>同期元</Text>
+          <View style={styles.chips}>
+            {accounts.map((account) => {
+              const active = rules.filter(
+                (r) => r.source.accountId === account.id && r.enabled,
+              ).length;
+              const selected = account.id === source.id;
+              return (
+                <Pressable
+                  key={account.id}
+                  style={[styles.chip, selected && styles.chipSelected]}
+                  onPress={() => setSourceId(account.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <View style={[styles.dot, active > 0 && styles.dotActive]} />
+                  <Text
+                    style={[
+                      styles.chipText,
+                      selected && styles.chipTextSelected,
+                    ]}
+                  >
+                    {accountName(account)}
+                  </Text>
+                  {active > 0 ? (
+                    <Text
+                      style={[
+                        styles.chipCount,
+                        selected && styles.chipTextSelected,
+                      ]}
+                    >
+                      {active}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>
+            {accountName(source)} の予定を反映する先
+          </Text>
+          <View style={styles.card}>
+            {targets.map((entry, index) => (
+              <View key={entry.target.id}>
+                {index > 0 ? <View style={styles.separator} /> : null}
+                <TargetRow
+                  source={source}
+                  entry={entry}
+                  onEdit={(ruleId) =>
+                    navigation.navigate("RuleEditor", { ruleId })
+                  }
+                  onCreate={(targetAccountId) =>
+                    navigation.navigate("RuleEditor", {
+                      sourceAccountId: source.id,
+                      targetAccountId,
+                    })
+                  }
+                  onToggle={toggleEnabled}
+                />
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       {orphans.length > 0 ? (
         <View style={styles.card}>
@@ -190,68 +252,37 @@ export default function RulesListScreen({ navigation }: Props) {
   );
 }
 
-function PairCard({
-  pair,
+function TargetRow({
+  source,
+  entry,
   onEdit,
   onCreate,
   onToggle,
 }: {
-  pair: AccountPair;
+  source: LinkedAccount;
+  entry: TargetEntry;
   onEdit: (ruleId: string) => void;
-  onCreate: (sourceAccountId: string, targetAccountId: string) => void;
+  onCreate: (targetAccountId: string) => void;
   onToggle: (rule: SyncRule, enabled: boolean) => void;
 }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>
-        {shortName(pair.a)} と {shortName(pair.b)}
-      </Text>
-      <DirectionRow
-        from={pair.a}
-        to={pair.b}
-        rule={pair.ab}
-        onEdit={onEdit}
-        onCreate={onCreate}
-        onToggle={onToggle}
-      />
-      <View style={styles.separator} />
-      <DirectionRow
-        from={pair.b}
-        to={pair.a}
-        rule={pair.ba}
-        onEdit={onEdit}
-        onCreate={onCreate}
-        onToggle={onToggle}
-      />
-    </View>
-  );
-}
-
-function DirectionRow({
-  from,
-  to,
-  rule,
-  onEdit,
-  onCreate,
-  onToggle,
-}: {
-  from: LinkedAccount;
-  to: LinkedAccount;
-  rule: SyncRule | undefined;
-  onEdit: (ruleId: string) => void;
-  onCreate: (sourceAccountId: string, targetAccountId: string) => void;
-  onToggle: (rule: SyncRule, enabled: boolean) => void;
-}) {
-  const direction = `${shortName(from)} → ${shortName(to)}`;
+  const { target, rule, reverse } = entry;
+  // 逆方向の設定があるかを小さく出す（同期元を切り替えなくても分かるように）
+  const reverseText = reverse
+    ? `逆方向（${accountName(target)} → ${accountName(source)}）: ${reverse.enabled ? "ON" : "OFF"}`
+    : `逆方向（${accountName(target)} → ${accountName(source)}）: 未設定`;
   if (!rule) {
     return (
       <View style={styles.row}>
+        <View style={[styles.dot, styles.rowDot]} />
         <View style={styles.rowMain}>
-          <Text style={styles.rowTitle}>{direction}</Text>
+          <Text style={[styles.rowTitle, styles.rowTitleUnset]}>
+            {accountName(target)}
+          </Text>
           <Text style={styles.rowMeta}>未設定</Text>
+          <Text style={styles.rowReverse}>{reverseText}</Text>
         </View>
         <Pressable
-          onPress={() => onCreate(from.id, to.id)}
+          onPress={() => onCreate(target.id)}
           accessibilityRole="button"
           hitSlop={8}
         >
@@ -266,10 +297,13 @@ function DirectionRow({
       onPress={() => onEdit(rule.id)}
       accessibilityRole="button"
     >
+      <View
+        style={[styles.dot, styles.rowDot, rule.enabled && styles.dotActive]}
+      />
       <View style={styles.rowMain}>
-        <Text style={styles.rowTitle}>{rule.name || direction}</Text>
-        {rule.name && rule.name !== direction ? (
-          <Text style={styles.rowMeta}>{direction}</Text>
+        <Text style={styles.rowTitle}>{accountName(target)}</Text>
+        {rule.name && rule.name !== defaultRuleName(source, target) ? (
+          <Text style={styles.rowName}>{rule.name}</Text>
         ) : null}
         <Text style={styles.rowMeta}>{summarizeRule(rule)}</Text>
         <Text style={styles.rowMeta}>
@@ -278,6 +312,7 @@ function DirectionRow({
         {rule.lastError ? (
           <Text style={styles.rowError}>エラー: {rule.lastError}</Text>
         ) : null}
+        <Text style={styles.rowReverse}>{reverseText}</Text>
       </View>
       <Switch
         value={rule.enabled}
@@ -285,11 +320,6 @@ function DirectionRow({
       />
     </Pressable>
   );
-}
-
-/** メールアドレスのローカル部（@ の前）か、Workspace ならドメインを短く表示する */
-function shortName(account: LinkedAccount): string {
-  return account.hd ?? account.email.split("@")[0] ?? account.email;
 }
 
 const styles = StyleSheet.create({
@@ -322,6 +352,54 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingVertical: 16,
   },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#888888",
+    marginBottom: 8,
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 20,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  chipSelected: {
+    backgroundColor: "#1A73E8",
+    borderColor: "#1A73E8",
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2D4150",
+  },
+  chipTextSelected: {
+    color: "#FFFFFF",
+  },
+  chipCount: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#C4C4C4",
+  },
+  dotActive: {
+    backgroundColor: "#34A853",
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
@@ -344,10 +422,26 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
+  rowDot: {
+    marginRight: 12,
+  },
   rowTitle: {
     fontSize: 15,
     fontWeight: "600",
     color: "#2D4150",
+  },
+  rowTitleUnset: {
+    color: "#999999",
+  },
+  rowName: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#2D4150",
+  },
+  rowReverse: {
+    marginTop: 4,
+    fontSize: 11,
+    color: "#999999",
   },
   rowMeta: {
     marginTop: 4,

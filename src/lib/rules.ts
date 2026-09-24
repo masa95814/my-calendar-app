@@ -1,3 +1,4 @@
+import { accountName } from "./accounts";
 import type {
   AllDaySourceHandling,
   AutoDeclineMode,
@@ -148,6 +149,9 @@ export function reverseRuleInput(
   const titleWasDefault =
     input.output.title === OUTPUT_KIND_LABELS[input.output.kind];
   return {
+    ...(newSource && newTarget
+      ? { name: defaultRuleName(newSource, newTarget) }
+      : {}),
     enabled: input.enabled,
     source: {
       accountId: input.target.accountId,
@@ -208,45 +212,50 @@ export function parseKeywords(text: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-export type AccountPair = {
-  key: string;
-  a: LinkedAccount;
-  b: LinkedAccount;
-  /** a → b */
-  ab?: SyncRule;
-  /** b → a */
-  ba?: SyncRule;
+/** 名前を空欄にしたときの同期設定の名前 */
+export function defaultRuleName(
+  source: LinkedAccount,
+  target: LinkedAccount,
+): string {
+  return `${accountName(source)} → ${accountName(target)}`;
+}
+
+export type TargetEntry = {
+  target: LinkedAccount;
+  /** 選んだ同期元 → target */
+  rule?: SyncRule;
+  /** target → 選んだ同期元（逆方向） */
+  reverse?: SyncRule;
 };
 
-/**
- * アカウントの全組み合わせを作り、方向ごとの同期設定を割り当てる。
- * 未連携のアカウントを参照する設定は orphans に分ける。
- */
-export function groupRulesByPair(
+/** 同期元 1 つについて、ほかの全アカウントを同期先として並べ、方向ごとの同期設定を割り当てる */
+export function targetsForSource(
+  source: LinkedAccount,
   rules: readonly SyncRule[],
   accounts: readonly LinkedAccount[],
-): { pairs: AccountPair[]; orphans: SyncRule[] } {
-  const byId = new Map(accounts.map((a) => [a.id, a]));
-  const pairs: AccountPair[] = [];
-  for (let i = 0; i < accounts.length; i++) {
-    for (let j = i + 1; j < accounts.length; j++) {
-      const a = accounts[i]!;
-      const b = accounts[j]!;
-      pairs.push({
-        key: `${a.id}|${b.id}`,
-        a,
-        b,
-        ab: rules.find(
-          (r) => r.source.accountId === a.id && r.target.accountId === b.id,
-        ),
-        ba: rules.find(
-          (r) => r.source.accountId === b.id && r.target.accountId === a.id,
-        ),
-      });
-    }
-  }
-  const orphans = rules.filter(
-    (r) => !byId.has(r.source.accountId) || !byId.has(r.target.accountId),
+): TargetEntry[] {
+  return accounts
+    .filter((a) => a.id !== source.id)
+    .map((target) => ({
+      target,
+      rule: rules.find(
+        (r) =>
+          r.source.accountId === source.id && r.target.accountId === target.id,
+      ),
+      reverse: rules.find(
+        (r) =>
+          r.source.accountId === target.id && r.target.accountId === source.id,
+      ),
+    }));
+}
+
+/** 未連携のアカウントを参照する同期設定（開いて削除できるように別に出す） */
+export function orphanRules(
+  rules: readonly SyncRule[],
+  accounts: readonly LinkedAccount[],
+): SyncRule[] {
+  const ids = new Set(accounts.map((a) => a.id));
+  return rules.filter(
+    (r) => !ids.has(r.source.accountId) || !ids.has(r.target.accountId),
   );
-  return { pairs, orphans };
 }

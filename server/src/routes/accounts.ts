@@ -20,6 +20,11 @@ export type AccountRouteDeps = {
   randomState: () => string;
 };
 
+const accountUpdateSchema = z.object({
+  /** 呼び名。空文字か null で未設定に戻す */
+  label: z.string().trim().max(30).nullable(),
+});
+
 const linkRequestSchema = z.object({
   /** 連携完了後に戻るアプリの URL */
   returnTo: z.string().min(1),
@@ -29,6 +34,7 @@ const linkRequestSchema = z.object({
  * 連携アカウントの API（すべて認証必須。/api 配下にマウントする）
  * - GET    /accounts        連携アカウント一覧
  * - POST   /accounts/link   連携開始。返された url をブラウザで開く
+ * - PATCH  /accounts/:id    呼び名の変更
  * - DELETE /accounts/:id    連携解除（Google 側のトークンも失効させる）
  */
 export function accountRoutes(deps: AccountRouteDeps) {
@@ -69,6 +75,31 @@ export function accountRoutes(deps: AccountRouteDeps) {
       offline: true,
     });
     return c.json({ url });
+  });
+
+  app.patch("/accounts/:id", async (c) => {
+    const uid = c.get("user").uid;
+    const account = await deps.stores.accounts.get(uid, c.req.param("id"));
+    if (!account) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const body = accountUpdateSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!body.success) {
+      return c.json(
+        { error: "invalid_request", issues: body.error.issues },
+        400,
+      );
+    }
+    const { label: _previous, ...rest } = account;
+    const updated = {
+      ...rest,
+      ...(body.data.label ? { label: body.data.label } : {}),
+      updatedAt: deps.now(),
+    };
+    await deps.stores.accounts.upsert(uid, updated);
+    return c.json({ account: toPublicAccount(updated) });
   });
 
   // 対応表の有無に関わらず、そのアカウントのメインカレンダーにある本アプリのミラー予定をすべて削除する（復旧用）

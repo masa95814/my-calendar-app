@@ -11,6 +11,8 @@ import {
 import * as Linking from "expo-linking";
 
 import { openAuthSession } from "../auth/AuthProvider";
+import { TextField } from "../components/form";
+import { accountName } from "../lib/accounts";
 import { api, describeApiError, type LinkedAccount } from "../lib/api";
 import { confirmAction, notify } from "../lib/dialog";
 import { describeAuthError } from "../lib/errorMessages";
@@ -75,6 +77,19 @@ export default function AccountsScreen() {
     }
   };
 
+  const rename = async (account: LinkedAccount, label: string) => {
+    try {
+      const { account: saved } = await api.updateAccount(account.id, {
+        label: label.trim() || null,
+      });
+      setAccounts((prev) => prev.map((a) => (a.id === saved.id ? saved : a)));
+      return true;
+    } catch (caught) {
+      notify("名前を変更できませんでした", describeApiError(caught));
+      return false;
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -111,7 +126,11 @@ export default function AccountsScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <AccountRow account={item} onUnlink={() => confirmUnlink(item)} />
+          <AccountRow
+            account={item}
+            onRename={(label) => rename(item, label)}
+            onUnlink={() => confirmUnlink(item)}
+          />
         )}
         ListFooterComponent={
           <View style={styles.footer}>
@@ -141,15 +160,71 @@ export default function AccountsScreen() {
 
 function AccountRow({
   account,
+  onRename,
   onUnlink,
 }: {
   account: LinkedAccount;
+  onRename: (label: string) => Promise<boolean>;
   onUnlink: () => void;
 }) {
   const isWorkspace = account.type === "workspace";
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(account.label ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const ok = await onRename(text);
+    setSaving(false);
+    if (ok) {
+      setEditing(false);
+    }
+  };
+
   return (
     <View style={styles.row}>
       <View style={styles.rowMain}>
+        {editing ? (
+          <View style={styles.renameRow}>
+            <TextField
+              value={text}
+              onChangeText={setText}
+              placeholder={accountName({ ...account, label: undefined })}
+              maxLength={30}
+              autoFocus
+              onSubmitEditing={save}
+              style={styles.renameInput}
+            />
+            <Pressable onPress={save} disabled={saving} hitSlop={8}>
+              <Text style={styles.renameAction}>
+                {saving ? "保存中" : "保存"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setText(account.label ?? "");
+                setEditing(false);
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.renameCancel}>やめる</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{accountName(account)}</Text>
+            <Pressable
+              onPress={() => {
+                setText(account.label ?? "");
+                setEditing(true);
+              }}
+              accessibilityRole="button"
+              hitSlop={8}
+            >
+              <Text style={styles.renameAction}>名前を変更</Text>
+            </Pressable>
+          </View>
+        )}
         <Text style={styles.email}>{account.email}</Text>
         <View style={styles.badges}>
           <Text
@@ -222,10 +297,37 @@ const styles = StyleSheet.create({
   rowMain: {
     flex: 1,
   },
-  email: {
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  name: {
     fontSize: 16,
     fontWeight: "600",
     color: "#2D4150",
+  },
+  renameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  renameInput: {
+    flex: 1,
+  },
+  renameAction: {
+    color: "#007AFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  renameCancel: {
+    color: "#666666",
+    fontSize: 13,
+  },
+  email: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#666666",
   },
   badges: {
     flexDirection: "row",

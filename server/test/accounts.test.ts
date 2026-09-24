@@ -96,6 +96,53 @@ describe("POST /api/accounts/link", () => {
   });
 });
 
+describe("PATCH /api/accounts/:id", () => {
+  const patch = (
+    h: ReturnType<typeof buildTestApp>,
+    id: string,
+    body: unknown,
+  ) =>
+    h.app.request(`/api/accounts/${id}`, {
+      method: "PATCH",
+      headers: { ...ownerHeaders, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("呼び名を付け、空にすると未設定に戻す", async () => {
+    const h = buildTestApp();
+    await h.stores.accounts.upsert("owner-uid", sampleAccount(h.cipher));
+
+    const res = await patch(h, "sub-1", { label: "  ギブリー " });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { account: Record<string, unknown> };
+    expect(body.account).toMatchObject({ id: "sub-1", label: "ギブリー" });
+    expect(body.account).not.toHaveProperty("refreshTokenEnc");
+    expect((await h.stores.accounts.get("owner-uid", "sub-1"))?.label).toBe(
+      "ギブリー",
+    );
+
+    expect((await patch(h, "sub-1", { label: "" })).status).toBe(200);
+    expect(
+      (await h.stores.accounts.get("owner-uid", "sub-1"))?.label,
+    ).toBeUndefined();
+    expect((await patch(h, "sub-1", { label: null })).status).toBe(200);
+  });
+
+  it("長すぎる呼び名は 400、他人のアカウントは 404", async () => {
+    const h = buildTestApp();
+    await h.stores.accounts.upsert("owner-uid", sampleAccount(h.cipher));
+    await h.stores.accounts.upsert(
+      "someone-else",
+      sampleAccount(h.cipher, { id: "sub-9" }),
+    );
+    expect((await patch(h, "sub-1", { label: "あ".repeat(31) })).status).toBe(
+      400,
+    );
+    expect((await patch(h, "sub-1", {})).status).toBe(400);
+    expect((await patch(h, "sub-9", { label: "x" })).status).toBe(404);
+  });
+});
+
 describe("DELETE /api/accounts/:id", () => {
   it("存在しなければ 404", async () => {
     const h = buildTestApp();

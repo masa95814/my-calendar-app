@@ -188,7 +188,7 @@ describe("GET /auth/google/callback（アカウント連携）", () => {
     expect(saved?.scopes).toContain(CALENDAR_EVENTS_SCOPE);
   });
 
-  it("個人アカウントは type=personal になり、再連携では linkedAt を保つ", async () => {
+  it("個人アカウントは type=personal になり、再連携では linkedAt と呼び名を保つ", async () => {
     const h = buildTestApp();
     const state = await startLink(h);
     h.google.codes.set("code-1", {
@@ -205,6 +205,7 @@ describe("GET /auth/google/callback（アカウント連携）", () => {
     const first = await h.stores.accounts.get("owner-uid", "sub-personal");
     expect(first?.type).toBe("personal");
     expect(first?.hd).toBeUndefined();
+    await h.stores.accounts.upsert("owner-uid", { ...first!, label: "メイン" });
 
     // 2 回目の連携（トークン更新）
     h.clock.now = new Date(h.clock.now.getTime() + 60 * 1000);
@@ -221,6 +222,8 @@ describe("GET /auth/google/callback（アカウント連携）", () => {
     await h.app.request("/auth/google/callback?code=code-2&state=state-2");
     const second = await h.stores.accounts.get("owner-uid", "sub-personal");
     expect(second?.linkedAt).toEqual(first?.linkedAt);
+    // 付けた呼び名は再連携でも消えない
+    expect(second?.label).toBe("メイン");
     expect(second?.updatedAt).toEqual(h.clock.now);
     expect(h.cipher.decrypt(second?.refreshTokenEnc ?? "")).toBe("refresh-2");
   });

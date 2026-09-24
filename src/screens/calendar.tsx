@@ -10,6 +10,7 @@ import {
 import { Calendar, LocaleConfig, type DateData } from "react-native-calendars";
 import { useFocusEffect } from "@react-navigation/native";
 
+import { accountName } from "../lib/accounts";
 import {
   api,
   describeApiError,
@@ -197,10 +198,12 @@ export default function CalendarScreen() {
   }, [eventsByDate, colors, selected]);
 
   const dayEvents = eventsByDate.get(selected) ?? [];
-  const accountLabel = (event: UnifiedEvent) =>
-    accounts.find((a) => a.id === event.accountId)?.hd ??
-    event.accountEmail.split("@")[0] ??
-    event.accountEmail;
+  const accountLabel = (event: UnifiedEvent) => {
+    const account = accounts.find((a) => a.id === event.accountId);
+    return account
+      ? accountName(account)
+      : (event.accountEmail.split("@")[0] ?? event.accountEmail);
+  };
 
   return (
     <ScrollView
@@ -249,7 +252,7 @@ export default function CalendarScreen() {
                 ]}
               />
               <Text style={styles.legendText} numberOfLines={1}>
-                {account.hd ?? account.email}
+                {accountName(account)}
               </Text>
             </View>
           ))}
