@@ -86,6 +86,7 @@ export function defaultRuleInput(
       requireMeetLink: false,
       excludeKeywords: [],
       includeKeywords: [],
+      alwaysIncludeKeywords: [],
       excludeAllDay: true,
       excludeTransparent: true,
       excludeDeclined: true,
@@ -117,6 +118,8 @@ export function ruleToInput(rule: SyncRule): RuleInput {
       ...rule.filters,
       excludeKeywords: [...rule.filters.excludeKeywords],
       includeKeywords: [...rule.filters.includeKeywords],
+      // 例外キーワードが追加される前に保存された設定は、空として扱う
+      alwaysIncludeKeywords: [...(rule.filters.alwaysIncludeKeywords ?? [])],
     },
     // 色の項目が追加される前に保存された設定は、色が未設定（既定）として扱う
     output: { ...rule.output, colorId: rule.output.colorId ?? null },
@@ -149,6 +152,7 @@ export function reverseRuleInput(
       ...input.filters,
       excludeKeywords: [...input.filters.excludeKeywords],
       includeKeywords: [...input.filters.includeKeywords],
+      alwaysIncludeKeywords: [...input.filters.alwaysIncludeKeywords],
     },
     output: {
       ...input.output,
@@ -172,6 +176,10 @@ export function summarizeRule(rule: SyncRule): string {
   }
   if (rule.filters.includeKeywords.length > 0) {
     parts.push(`包含キーワード ${rule.filters.includeKeywords.length} 件`);
+  }
+  const always = rule.filters.alwaysIncludeKeywords ?? [];
+  if (always.length > 0) {
+    parts.push(`例外「${always.join("・")}」`);
   }
   parts.push(`${rule.windowDays} 日先まで`);
   return parts.join("・");

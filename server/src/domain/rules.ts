@@ -41,7 +41,7 @@ const keywordList = z
   .max(50)
   .default([]);
 
-/** F3. フィルタ条件。条件は AND で評価する */
+/** F3. フィルタ条件。条件は AND で評価する（alwaysIncludeKeywords だけは一部の条件を飛ばす例外） */
 export const ruleFiltersSchema = z.object({
   /** 参加者が N 人以上の予定のみ（自分を含む）。null は条件なし */
   minAttendees: z.number().int().min(1).max(100).nullable().default(null),
@@ -51,6 +51,11 @@ export const ruleFiltersSchema = z.object({
   excludeKeywords: keywordList,
   /** 指定時、タイトルまたは説明にいずれかを含む予定のみ同期 */
   includeKeywords: keywordList,
+  /**
+   * タイトルにいずれかを含む予定は、参加者数・会議リンク・包含キーワードの条件を満たさなくても同期する。
+   * 除外キーワードや辞退済みなど、ほかの条件は優先する
+   */
+  alwaysIncludeKeywords: keywordList,
   excludeAllDay: z.boolean().default(true),
   /** 「予定なし」扱い（transparent）の予定を除外 */
   excludeTransparent: z.boolean().default(true),

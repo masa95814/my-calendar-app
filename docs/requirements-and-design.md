@@ -81,16 +81,17 @@ Claude 側で決めた事項（異論があれば変更する）:
 
 すべて同期設定ごとに指定する。条件は AND で評価する。
 
-| 条件             | 内容                                                                      | 既定     |
-| ---------------- | ------------------------------------------------------------------------- | -------- |
-| 参加者数         | 参加者が N 人以上の予定のみ（自分を含む）。「複数人の予定のみ」は N=2     | 条件なし |
-| 会議リンク       | Google Meet などの会議リンクがある予定のみ                                | 条件なし |
-| 除外キーワード   | タイトルにいずれかを含む予定は除外する（説明文は見ない。2026-09-23 変更） | なし     |
-| 包含キーワード   | 指定した場合、タイトルまたは説明にいずれかを含む予定のみ同期する          | なし     |
-| 終日予定         | 終日の予定を除外する                                                      | 除外する |
-| 「予定なし」扱い | 時間を空けない設定（transparent）の予定を除外する                         | 除外する |
-| 辞退した予定     | 自分が辞退した予定を除外する                                              | 除外する |
-| 未回答 / 仮承諾  | 返答していない、または仮承諾の予定を含める                                | 含める   |
+| 条件                     | 内容                                                                                                                                                                                  | 既定     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 参加者数                 | 参加者が N 人以上の予定のみ（自分を含む）。「複数人の予定のみ」は N=2                                                                                                                 | 条件なし |
+| 会議リンク               | Google Meet などの会議リンクがある予定のみ                                                                                                                                            | 条件なし |
+| 除外キーワード           | タイトルにいずれかを含む予定は除外する（説明文は見ない。2026-09-23 変更）                                                                                                             | なし     |
+| 包含キーワード           | 指定した場合、タイトルまたは説明にいずれかを含む予定のみ同期する                                                                                                                      | なし     |
+| 例外で同期するキーワード | タイトルにいずれかを含む予定は、参加者数・会議リンク・包含キーワードの条件に合わなくても同期する。除外キーワードや辞退済みなどは優先する（2026-09-24 追加。例: 1 人で入れた「面談」） | なし     |
+| 終日予定                 | 終日の予定を除外する                                                                                                                                                                  | 除外する |
+| 「予定なし」扱い         | 時間を空けない設定（transparent）の予定を除外する                                                                                                                                     | 除外する |
+| 辞退した予定             | 自分が辞退した予定を除外する                                                                                                                                                          | 除外する |
+| 未回答 / 仮承諾          | 返答していない、または仮承諾の予定を含める                                                                                                                                            | 含める   |
 
 共通ルール（設定不可）:
 
@@ -203,7 +204,7 @@ users/{uid}/rules/{ruleId}
   target: { accountId },
   windowDays,
   filters: { minAttendees, requireMeetLink, excludeKeywords: [], includeKeywords: [],
-             excludeAllDay, excludeTransparent, excludeDeclined, includeTentative },
+             alwaysIncludeKeywords: [], excludeAllDay, excludeTransparent, excludeDeclined, includeTentative },
   output:  { kind: "outOfOffice" | "busy", title, copyDescription, copyLocation,
              visibility, allDaySourceHandling: "fullDay" | "skip",
              autoDeclineMode, declineMessage },
@@ -231,6 +232,7 @@ users/{uid}/accounts/{accountId}/watch/{calendarId}
     "requireMeetLink": false,
     "excludeKeywords": ["仮", "移動"],
     "includeKeywords": [],
+    "alwaysIncludeKeywords": [],
     "excludeAllDay": true,
     "excludeTransparent": true,
     "excludeDeclined": true,

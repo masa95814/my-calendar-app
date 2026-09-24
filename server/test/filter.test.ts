@@ -19,6 +19,7 @@ function rule(overrides: Partial<SyncRule> = {}): SyncRule {
       requireMeetLink: false,
       excludeKeywords: [],
       includeKeywords: [],
+      alwaysIncludeKeywords: [],
       excludeAllDay: true,
       excludeTransparent: true,
       excludeDeclined: true,
@@ -235,6 +236,67 @@ describe("evaluateEvent", () => {
         event({ summary: "顧客訪問" }),
         withFilters({ includeKeywords: ["顧客"] }),
       ),
+    ).toBe("mirror");
+  });
+
+  it("例外キーワードに当たる予定は、参加者数・会議リンク・包含キーワードの条件を飛ばす", () => {
+    const filters = {
+      minAttendees: 2,
+      requireMeetLink: true,
+      includeKeywords: ["顧客"],
+      alwaysIncludeKeywords: ["面談"],
+    };
+    // 1 人で入れた「面談」は同期する
+    expect(reason(event({ summary: "採用面談" }), withFilters(filters))).toBe(
+      "mirror",
+    );
+    // 例外に当たらない 1 人の予定は、今まで通り参加者数で除外する
+    expect(reason(event({ summary: "作業" }), withFilters(filters))).toBe(
+      "attendees",
+    );
+    // 例外キーワードはタイトルだけを見る
+    expect(
+      reason(
+        event({ summary: "作業", description: "面談の準備" }),
+        withFilters(filters),
+      ),
+    ).toBe("attendees");
+    // 除外キーワードは例外より優先する
+    expect(
+      reason(
+        event({ summary: "面談（仮）" }),
+        withFilters({ ...filters, excludeKeywords: ["仮"] }),
+      ),
+    ).toBe("exclude_keyword");
+    // 辞退済みや終日などの条件も優先する
+    expect(
+      reason(
+        event({
+          summary: "面談",
+          attendees: [
+            { email: "me@example.com", self: true, responseStatus: "declined" },
+          ],
+        }),
+        withFilters(filters),
+      ),
+    ).toBe("declined");
+    expect(
+      reason(
+        event({
+          summary: "面談",
+          start: { date: "2026-09-24" },
+          end: { date: "2026-09-25" },
+        }),
+        withFilters(filters),
+      ),
+    ).toBe("all_day");
+  });
+
+  it("例外キーワードの項目が無い古い設定でも判定できる", () => {
+    const base = rule();
+    const { alwaysIncludeKeywords: _omit, ...legacy } = base.filters;
+    expect(
+      reason(event(), { ...base, filters: legacy as SyncRule["filters"] }),
     ).toBe("mirror");
   });
 });
