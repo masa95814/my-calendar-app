@@ -33,6 +33,8 @@ export type LinkedAccount = {
   email: string;
   /** Workspace のドメイン。個人アカウントでは undefined */
   hd?: string;
+  /** 画面に出す呼び名（例: メイン、ギブリー）。未設定なら Workspace のドメインかメールアドレスから作る */
+  label?: string;
   type: AccountType;
   /** 暗号化済みのリフレッシュトークン */
   refreshTokenEnc: string;

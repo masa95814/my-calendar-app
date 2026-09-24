@@ -35,6 +35,8 @@ export type LinkedAccount = {
   id: string;
   email: string;
   hd?: string;
+  /** 画面に出す呼び名（例: メイン、ギブリー）。表示には lib/accounts の accountName を使う */
+  label?: string;
   type: "workspace" | "personal";
   status: "ok" | "reauth_required";
   scopes: string[];
@@ -197,6 +199,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ returnTo }),
     }),
+
+  /** 呼び名の変更。null か空文字で未設定に戻す */
+  updateAccount: (accountId: string, input: { label: string | null }) =>
+    request<{ account: LinkedAccount }>(
+      `/api/accounts/${encodeURIComponent(accountId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
 
   unlinkAccount: (accountId: string) =>
     request<void>(`/api/accounts/${encodeURIComponent(accountId)}`, {
