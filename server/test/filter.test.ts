@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateEvent, hasConferenceLink } from "../src/domain/filter.js";
+import {
+  evaluateEvent,
+  hasConferenceLink,
+  startOfDayIn,
+} from "../src/domain/filter.js";
 import type { SyncRule } from "../src/domain/rules.js";
 import type { CalendarEvent } from "../src/lib/calendar.js";
 
@@ -300,5 +304,44 @@ describe("evaluateEvent", () => {
     expect(
       reason(event(), { ...base, filters: legacy as SyncRule["filters"] }),
     ).toBe("mirror");
+  });
+});
+
+describe("同期範囲の始まり", () => {
+  it("そのタイムゾーンでの今日の 0:00 を返す", () => {
+    // 2026-09-24 14:00（日本時間）
+    const now = new Date("2026-09-24T05:00:00Z");
+    expect(startOfDayIn(now, "Asia/Tokyo")).toEqual(
+      new Date("2026-09-23T15:00:00Z"),
+    );
+    // 日本時間の 0:30 は、UTC ではまだ前日
+    expect(
+      startOfDayIn(new Date("2026-09-23T15:30:00Z"), "Asia/Tokyo"),
+    ).toEqual(new Date("2026-09-23T15:00:00Z"));
+    expect(startOfDayIn(now, "UTC")).toEqual(new Date("2026-09-24T00:00:00Z"));
+    // 不明なタイムゾーン名は日本時間として扱う
+    expect(startOfDayIn(now, "Not/AZone")).toEqual(
+      new Date("2026-09-23T15:00:00Z"),
+    );
+  });
+
+  it("範囲の始まりより前に終わった予定だけを past にする", () => {
+    const at = new Date("2026-09-24T05:00:00Z"); // 14:00（日本時間）
+    const windowStart = startOfDayIn(at, "Asia/Tokyo");
+    // 今日の 10:00〜11:00 はもう終わっているが、今日の予定なので同期する
+    const r = evaluateEvent(event(), rule(), { now: at, windowStart });
+    expect(r.mirror).toBe(true);
+    // 範囲の始まりを渡さなければ、これまで通り終わった予定は past
+    expect(evaluateEvent(event(), rule(), { now: at })).toMatchObject({
+      mirror: false,
+      reason: "past",
+    });
+    const yesterday = event({
+      start: { dateTime: "2026-09-23T10:00:00+09:00" },
+      end: { dateTime: "2026-09-23T11:00:00+09:00" },
+    });
+    expect(
+      evaluateEvent(yesterday, rule(), { now: at, windowStart }),
+    ).toMatchObject({ mirror: false, reason: "past" });
   });
 });
