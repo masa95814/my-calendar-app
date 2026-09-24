@@ -44,6 +44,39 @@ function toDate(
   return undefined;
 }
 
+/**
+ * そのタイムゾーンでの今日の 0:00。同期範囲の始まりに使う
+ * （今日すでに終わった予定も同期し、それより前のミラーは履歴として残す）
+ */
+export function startOfDayIn(now: Date, timeZone: string): Date {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+  } catch {
+    // 不明なタイムゾーン名なら日本時間として扱う
+    return startOfDayIn(now, "Asia/Tokyo");
+  }
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const year = get("year");
+  const month = get("month") - 1;
+  const day = get("day");
+  // 現地時刻を UTC とみなした値との差がオフセット
+  const offset =
+    Date.UTC(year, month, day, get("hour"), get("minute"), get("second")) -
+    Math.floor(now.getTime() / 1000) * 1000;
+  return new Date(Date.UTC(year, month, day) - offset);
+}
+
 /** 時間を埋めない種類の予定は同期しない */
 const SKIPPED_EVENT_TYPES = new Set([
   "workingLocation",
@@ -86,7 +119,11 @@ export type Evaluation =
 export function evaluateEvent(
   event: CalendarEvent,
   rule: SyncRule,
-  context: { now: Date },
+  context: {
+    now: Date;
+    /** 同期範囲の始まり（今日の 0:00）。これより前に終わった予定は past。未指定なら now */
+    windowStart?: Date;
+  },
 ): Evaluation {
   const no = (reason: string): Evaluation => ({ mirror: false, reason });
 
@@ -106,7 +143,7 @@ export function evaluateEvent(
     return no("no_time");
   }
   const nowMs = context.now.getTime();
-  if (end.getTime() <= nowMs) {
+  if (end.getTime() <= (context.windowStart ?? context.now).getTime()) {
     return no("past");
   }
   if (start.getTime() >= nowMs + rule.windowDays * 24 * 60 * 60 * 1000) {
