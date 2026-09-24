@@ -100,6 +100,7 @@ export function defaultRuleInput(
       visibility: "public",
       colorId: null,
       maxDurationMinutes: null,
+      maxDurationKeywords: [],
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: DEFAULT_DECLINE_MESSAGE,
@@ -127,6 +128,7 @@ export function ruleToInput(rule: SyncRule): RuleInput {
       ...rule.output,
       colorId: rule.output.colorId ?? null,
       maxDurationMinutes: rule.output.maxDurationMinutes ?? null,
+      maxDurationKeywords: [...(rule.output.maxDurationKeywords ?? [])],
     },
   };
 }
@@ -187,7 +189,12 @@ export function summarizeRule(rule: SyncRule): string {
     parts.push(`例外「${always.join("・")}」`);
   }
   if (rule.output.maxDurationMinutes) {
-    parts.push(`最長 ${rule.output.maxDurationMinutes} 分`);
+    const capKeywords = rule.output.maxDurationKeywords ?? [];
+    parts.push(
+      capKeywords.length > 0
+        ? `「${capKeywords.join("・")}」は最長 ${rule.output.maxDurationMinutes} 分`
+        : `最長 ${rule.output.maxDurationMinutes} 分`,
+    );
   }
   parts.push(`${rule.windowDays} 日先まで`);
   return parts.join("・");

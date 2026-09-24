@@ -63,7 +63,7 @@ export function buildMirrorEvent(
       dateTime: capEnd(
         event.start?.dateTime,
         event.end?.dateTime,
-        rule.output.maxDurationMinutes ?? null,
+        durationCapFor(event, rule),
       ),
     };
   }
@@ -116,6 +116,22 @@ export function buildMirrorEvent(
   }
 
   return body;
+}
+
+/** この予定に使う長さの上限（分）。キーワードが指定されていれば、タイトルに含む予定だけに使う */
+export function durationCapFor(
+  event: CalendarEvent,
+  rule: SyncRule,
+): number | null {
+  const minutes = rule.output.maxDurationMinutes ?? null;
+  const keywords = rule.output.maxDurationKeywords ?? [];
+  if (minutes === null || keywords.length === 0) {
+    return minutes;
+  }
+  const title = (event.summary ?? "").toLowerCase();
+  return keywords.some((keyword) => title.includes(keyword.toLowerCase()))
+    ? minutes
+    : null;
 }
 
 /**
