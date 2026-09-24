@@ -475,3 +475,81 @@ describe("同期エンジン: 予定の色", () => {
     expect(mirrorsInB(h)[0]?.colorId).toBeUndefined();
   });
 });
+
+describe("同期エンジン: 今日の予定と過去のミラー", () => {
+  // meeting() の既定は 2026-09-24 10:00〜11:00（日本時間）
+  const afternoonOf24th = new Date("2026-09-24T05:00:00Z"); // 14:00（日本時間）
+  const nextDay = new Date("2026-09-25T05:00:00Z"); // 9/25 14:00（日本時間）
+
+  it("今日すでに終わった予定も同期する", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.clock.now = afternoonOf24th;
+    h.calendars.put("acc-a", "primary", meeting("evt-morning"));
+    const { summary } = await createRule(h);
+    expect(summary).toMatchObject({ created: 1, errors: [] });
+    expect(mirrorsInB(h)).toHaveLength(1);
+    const [record] = await h.stores.mirrors.listByRule(
+      "owner-uid",
+      mirrorsInB(h)[0]?.extendedProperties?.private?.mcaRuleId ?? "",
+    );
+    expect(record?.sourceEndAt).toEqual(new Date("2026-09-24T02:00:00Z"));
+  });
+
+  it("前日以前に終わった予定のミラーは、全件同期で元予定が範囲外になっても残す", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.clock.now = afternoonOf24th;
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    const { rule } = await createRule(h);
+    expect(mirrorsInB(h)).toHaveLength(1);
+
+    // 翌日の全件同期: 元予定は範囲（今日の 0:00〜）より前なので取得されない
+    h.clock.now = nextDay;
+    h.calendars.purge("acc-a", "primary", "evt-1");
+    h.calendars.expireSyncTokens();
+    expect(await poll(h)).toMatchObject({ deleted: 0, errors: [] });
+    expect(mirrorsInB(h)).toHaveLength(1);
+    expect(
+      await h.stores.mirrors.listByRule("owner-uid", rule.id),
+    ).toHaveLength(1);
+  });
+
+  it("前日以前の予定が変更されてもミラーは残し、キャンセルされたら消す", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.clock.now = afternoonOf24th;
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    await createRule(h);
+
+    h.clock.now = nextDay;
+    h.calendars.put(
+      "acc-a",
+      "primary",
+      meeting("evt-1", { summary: "会議（議事録を追記）" }),
+    );
+    expect(await poll(h)).toMatchObject({ deleted: 0 });
+    expect(mirrorsInB(h)).toHaveLength(1);
+
+    h.calendars.cancel("acc-a", "primary", "evt-1");
+    expect(await poll(h)).toMatchObject({ deleted: 1 });
+    expect(mirrorsInB(h)).toHaveLength(0);
+  });
+
+  it("終了時刻の無い古い対応表は、次の同期で埋める", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    const { rule } = await createRule(h);
+    const [record] = await h.stores.mirrors.listByRule("owner-uid", rule.id);
+    await h.stores.mirrors.upsert("owner-uid", {
+      ...record!,
+      sourceEndAt: null,
+    });
+
+    h.calendars.expireSyncTokens();
+    expect(await poll(h)).toMatchObject({ updated: 0, deleted: 0 });
+    const [filled] = await h.stores.mirrors.listByRule("owner-uid", rule.id);
+    expect(filled?.sourceEndAt).toEqual(new Date("2026-09-24T02:00:00Z"));
+  });
+});

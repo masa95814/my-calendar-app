@@ -1,8 +1,10 @@
 import {
   evaluateEvent,
+  eventEnd,
   isAllDay,
   isMirrorEvent,
   MIRROR_KEYS,
+  startOfDayIn,
 } from "../domain/filter.js";
 import {
   buildMirrorEvent,
@@ -126,6 +128,7 @@ export function createSyncService(deps: SyncDeps) {
     calendarId: string,
     syncToken: string | null,
     windowDays: number,
+    windowStart: Date,
   ): Promise<{ events: CalendarEvent[]; nextSyncToken: string | null }> {
     const now = deps.now();
     const events: CalendarEvent[] = [];
@@ -137,7 +140,7 @@ export function createSyncService(deps: SyncDeps) {
         ...(syncToken
           ? { syncToken }
           : {
-              timeMin: now.toISOString(),
+              timeMin: windowStart.toISOString(),
               timeMax: new Date(
                 now.getTime() + windowDays * 24 * 60 * 60 * 1000,
               ).toISOString(),
@@ -205,16 +208,21 @@ export function createSyncService(deps: SyncDeps) {
     targetAccount: LinkedAccount,
     targetClient: CalendarClient,
     summary: SyncSummary,
+    windowStart: Date,
   ): Promise<void> {
     if (!event.id) {
       return;
     }
     const id = mirrorId(rule.id, group.calendarId, event.id);
     const existing = await stores.mirrors.get(uid, id);
-    const evaluation = evaluateEvent(event, rule, { now: deps.now() });
+    const evaluation = evaluateEvent(event, rule, {
+      now: deps.now(),
+      windowStart,
+    });
 
     if (!evaluation.mirror) {
-      if (existing) {
+      // 同期範囲より前に終わった予定のミラーは、履歴として残す（キャンセルされた予定は上で消す）
+      if (existing && evaluation.reason !== "past") {
         await targetClient.deleteEvent(
           existing.targetCalendarId,
           existing.targetEventId,
@@ -274,6 +282,7 @@ export function createSyncService(deps: SyncDeps) {
       targetEventId,
       kind: rule.output.kind,
       fingerprint,
+      sourceEndAt: eventEnd(event) ?? null,
       updatedAt: deps.now(),
     });
 
@@ -297,6 +306,13 @@ export function createSyncService(deps: SyncDeps) {
     }
 
     if (existing.fingerprint === fingerprint) {
+      // 終了時刻の項目が追加される前の対応表は、ここで埋める（予定自体は変えない）
+      if (!existing.sourceEndAt) {
+        await stores.mirrors.upsert(uid, {
+          ...existing,
+          sourceEndAt: eventEnd(event) ?? null,
+        });
+      }
       summary.skipped++;
       return;
     }
@@ -338,6 +354,11 @@ export function createSyncService(deps: SyncDeps) {
       channelExpiresAt: null,
     };
     const windowDays = Math.max(...group.rules.map((r) => r.windowDays));
+    // 今日すでに終わった予定も同期するため、範囲は送信元のタイムゾーンでの今日の 0:00 から
+    const windowStart = startOfDayIn(
+      deps.now(),
+      sourceTimeZone(group.account, group.calendarId),
+    );
     const sourceClient = deps.calendarFor(group.account);
 
     let usedFull = full || !state.syncToken;
@@ -349,6 +370,7 @@ export function createSyncService(deps: SyncDeps) {
           group.calendarId,
           usedFull ? null : state.syncToken,
           windowDays,
+          windowStart,
         );
       } catch (error) {
         if (!(error instanceof SyncTokenExpiredError)) {
@@ -361,6 +383,7 @@ export function createSyncService(deps: SyncDeps) {
           group.calendarId,
           null,
           windowDays,
+          windowStart,
         );
       }
     } catch (error) {
@@ -410,6 +433,7 @@ export function createSyncService(deps: SyncDeps) {
             targetAccount,
             targetClient,
             summary,
+            windowStart,
           );
         } catch (error) {
           const message = describeError(error);
@@ -447,6 +471,13 @@ export function createSyncService(deps: SyncDeps) {
           if (
             record.ruleId !== rule.id ||
             seenEventIds.has(record.sourceEventId)
+          ) {
+            continue;
+          }
+          // 範囲より前に終わった予定は取得されないので、見えなくても履歴として残す
+          if (
+            record.sourceEndAt &&
+            record.sourceEndAt.getTime() <= windowStart.getTime()
           ) {
             continue;
           }

@@ -172,6 +172,9 @@ export function createFirestoreStores(db: Firestore): Stores {
             targetEventId: record.targetEventId,
             kind: record.kind,
             fingerprint: record.fingerprint,
+            sourceEndAt: record.sourceEndAt
+              ? Timestamp.fromDate(record.sourceEndAt)
+              : null,
             updatedAt: Timestamp.fromDate(record.updatedAt),
           });
       },
@@ -375,6 +378,7 @@ function fromMirrorDoc(id: string, data: DocumentData): MirrorRecord {
     targetEventId: String(data.targetEventId ?? ""),
     kind: (data.kind as OutputKind) ?? "busy",
     fingerprint: String(data.fingerprint ?? ""),
+    sourceEndAt: toDateOrNull(data.sourceEndAt),
     updatedAt: toDate(data.updatedAt),
   };
 }

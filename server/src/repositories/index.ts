@@ -102,6 +102,11 @@ export type MirrorRecord = {
   targetEventId: string;
   kind: OutputKind;
   fingerprint: string;
+  /**
+   * 元予定の終了時刻。同期範囲より前に終わった予定のミラーを、履歴として消さずに残す判定に使う。
+   * この項目が追加される前の対応表は null（次に同期したときに埋まる）
+   */
+  sourceEndAt: Date | null;
   updatedAt: Date;
 };
 
