@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMirrorEvent, fingerprintOf } from "../src/domain/mirror.js";
+import {
+  buildMirrorEvent,
+  capEnd,
+  fingerprintOf,
+} from "../src/domain/mirror.js";
 import type { SyncRule } from "../src/domain/rules.js";
 import type { CalendarEvent } from "../src/lib/calendar.js";
 import type { LinkedAccount } from "../src/repositories/index.js";
@@ -54,6 +58,7 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       copyLocation: false,
       visibility: "public",
       colorId: null,
+      maxDurationMinutes: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -175,6 +180,56 @@ describe("予定の色", () => {
     expect(tomato.colorId).toBe("11");
     expect(none.colorId).toBeUndefined();
     expect(fingerprintOf(tomato)).not.toBe(fingerprintOf(none));
+  });
+});
+
+describe("長さの上限", () => {
+  it("上限より長い予定は終了を「開始 + 上限」にし、開始と同じオフセットで書く", () => {
+    const capped = buildMirrorEvent(
+      timed,
+      rule({ maxDurationMinutes: 30 }),
+      context,
+    );
+    expect(capped.start).toEqual({ dateTime: "2026-09-24T10:00:00+09:00" });
+    expect(capped.end).toEqual({ dateTime: "2026-09-24T10:30:00+09:00" });
+    // 長さの変更は指紋に反映する（既存のミラーが更新される）
+    expect(fingerprintOf(capped)).not.toBe(
+      fingerprintOf(buildMirrorEvent(timed, rule(), context)),
+    );
+  });
+
+  it("上限以内の予定・上限なし・終日の予定はそのまま", () => {
+    const allDay: CalendarEvent = {
+      id: "evt-2",
+      summary: "休暇",
+      start: { date: "2026-09-25" },
+      end: { date: "2026-09-27" },
+    };
+    expect(
+      buildMirrorEvent(timed, rule({ maxDurationMinutes: 60 }), context).end,
+    ).toEqual({ dateTime: "2026-09-24T11:00:00+09:00" });
+    expect(buildMirrorEvent(timed, rule(), context).end).toEqual({
+      dateTime: "2026-09-24T11:00:00+09:00",
+    });
+    expect(
+      buildMirrorEvent(
+        allDay,
+        rule({ kind: "busy", maxDurationMinutes: 30 }),
+        context,
+      ).end,
+    ).toEqual({ date: "2026-09-27" });
+  });
+
+  it("日付をまたぐ場合や UTC 表記でも正しく切り詰める", () => {
+    expect(
+      capEnd("2026-09-24T23:45:00+09:00", "2026-09-25T01:00:00+09:00", 30),
+    ).toBe("2026-09-25T00:15:00+09:00");
+    expect(capEnd("2026-09-24T01:00:00Z", "2026-09-24T03:00:00Z", 90)).toBe(
+      "2026-09-24T02:30:00Z",
+    );
+    expect(
+      capEnd("2026-09-24T10:00:00-05:30", "2026-09-24T12:00:00-05:30", 45),
+    ).toBe("2026-09-24T10:45:00-05:30");
   });
 });
 
