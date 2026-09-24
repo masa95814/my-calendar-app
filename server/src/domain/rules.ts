@@ -86,6 +86,11 @@ export const ruleOutputSchema = z.object({
     .max(1440)
     .nullable()
     .default(null),
+  /**
+   * 長さの上限をかける予定。タイトルにいずれかを含む予定だけに上限を使う（空なら全部の予定）。
+   * 例: 「農活」なら「【農活】WEB・SF開発定例」だけを切り詰め、「SalesforceMTG」はそのままにする
+   */
+  maxDurationKeywords: keywordList,
   /** 終日の元予定を 0:00〜24:00 の時間指定に変換するか、同期しないか */
   allDaySourceHandling: allDaySourceHandlingSchema.default("fullDay"),
   /** 不在のみ有効 */

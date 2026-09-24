@@ -59,6 +59,7 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       visibility: "public",
       colorId: null,
       maxDurationMinutes: null,
+      maxDurationKeywords: [],
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -218,6 +219,29 @@ describe("長さの上限", () => {
         context,
       ).end,
     ).toEqual({ date: "2026-09-27" });
+  });
+
+  it("キーワードを指定すると、タイトルに含む予定だけを切り詰める", () => {
+    const capped = rule({
+      maxDurationMinutes: 30,
+      maxDurationKeywords: ["農活"],
+    });
+    const teiRei = { ...timed, summary: "【農活】WEB・SF開発定例" };
+    const other = { ...timed, summary: "SalesforceMTG" };
+    expect(buildMirrorEvent(teiRei, capped, context).end).toEqual({
+      dateTime: "2026-09-24T10:30:00+09:00",
+    });
+    expect(buildMirrorEvent(other, capped, context).end).toEqual({
+      dateTime: "2026-09-24T11:00:00+09:00",
+    });
+    // 大文字小文字は区別しない
+    expect(
+      buildMirrorEvent(
+        other,
+        rule({ maxDurationMinutes: 30, maxDurationKeywords: ["salesforce"] }),
+        context,
+      ).end,
+    ).toEqual({ dateTime: "2026-09-24T10:30:00+09:00" });
   });
 
   it("日付をまたぐ場合や UTC 表記でも正しく切り詰める", () => {
