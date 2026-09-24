@@ -20,6 +20,7 @@ import {
   SwitchRow,
   TextField,
 } from "../components/form";
+import { accountName } from "../lib/accounts";
 import {
   api,
   ApiError,
@@ -34,6 +35,7 @@ import {
   AUTO_DECLINE_LABELS,
   defaultKindFor,
   defaultRuleInput,
+  defaultRuleName,
   EVENT_COLORS,
   OUTPUT_KIND_LABELS,
   parseKeywords,
@@ -196,7 +198,9 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
 
   const buildPayload = (): RuleInput => ({
     ...input,
-    name: input.name?.trim() ? input.name.trim() : undefined,
+    name:
+      input.name?.trim() ||
+      (source && target ? defaultRuleName(source, target) : undefined),
     filters: {
       ...input.filters,
       excludeKeywords: parseKeywords(excludeText),
@@ -295,8 +299,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
 
   const accountOptions = accounts.map((a) => ({
     value: a.id,
-    label:
-      a.type === "workspace" ? `${a.email}（Workspace）` : `${a.email}（個人）`,
+    label: `${accountName(a)}（${a.email}）`,
   }));
   const calendarOptions = (source?.calendars ?? []).map((c) => ({
     value: c.id,
@@ -317,13 +320,13 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         <Section title="基本">
           <Field
             label="名前"
-            help="空欄なら「送信元 → 同期先」のメールアドレスになります"
+            help="空欄なら「送信元 → 同期先」のアカウント名になります"
           >
             <TextField
               value={input.name ?? ""}
               onChangeText={(name) => update({ name })}
               placeholder={
-                source && target ? `${source.email} → ${target.email}` : "任意"
+                source && target ? defaultRuleName(source, target) : "任意"
               }
             />
           </Field>
@@ -625,7 +628,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         {isNew && source && target ? (
           <Section title="逆方向">
             <SwitchRow
-              label={`${target.email} → ${source.email} も同時に作成`}
+              label={`${defaultRuleName(target, source)} も同時に作成`}
               help="同じフィルタと出力設定をコピーした別の同期設定を作ります。作成後は個別に編集できます"
               value={alsoReverse}
               onValueChange={setAlsoReverse}

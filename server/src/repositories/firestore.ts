@@ -387,6 +387,7 @@ function toAccountDoc(account: LinkedAccount): DocumentData {
   return {
     email: account.email,
     hd: account.hd ?? null,
+    label: account.label ?? null,
     type: account.type,
     refreshTokenEnc: account.refreshTokenEnc,
     scopes: account.scopes,
@@ -413,6 +414,9 @@ function fromAccountDoc(id: string, data: DocumentData): LinkedAccount {
   };
   if (typeof data.hd === "string") {
     account.hd = data.hd;
+  }
+  if (typeof data.label === "string" && data.label) {
+    account.label = data.label;
   }
   return account;
 }
