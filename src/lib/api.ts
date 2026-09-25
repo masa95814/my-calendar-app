@@ -250,6 +250,10 @@ export const api = {
 
   status: () => request<StatusResponse>("/api/status"),
 
+  /** Slack にテスト通知を送る。通知先が未設定なら 409（notifications_not_configured） */
+  testNotification: () =>
+    request<{ sent: boolean }>("/api/notifications/test", { method: "POST" }),
+
   /** そのアカウントのミラー予定を対応表の有無に関わらず一括削除（復旧用） */
   purgeMirrors: (accountId: string) =>
     request<{ deletedEvents: number; deletedRecords: number }>(

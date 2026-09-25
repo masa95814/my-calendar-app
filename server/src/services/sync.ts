@@ -20,6 +20,7 @@ import {
   type CalendarEvent,
 } from "../lib/calendar.js";
 import { logger } from "../lib/logger.js";
+import type { Notify } from "../lib/slack.js";
 import {
   mirrorId,
   syncStateId,
@@ -46,6 +47,10 @@ export type SyncDeps = {
   publicBaseUrl?: string;
   /** watch チャネルの有効期間（秒）。Google の上限は約 7 日 */
   watchTtlSeconds?: number;
+  /** 同期エラー・復旧・再認証が必要になったことを知らせる（未設定なら通知しない） */
+  notify?: Notify;
+  /** 通知に付けるアプリの URL */
+  appUrl?: string;
 };
 
 export type SyncSummary = {
@@ -183,16 +188,29 @@ export function createSyncService(deps: SyncDeps) {
     return events;
   }
 
+  /** 通知を送る。本文の最後にアプリの URL を付ける */
+  async function notify(text: string): Promise<void> {
+    if (!deps.notify) {
+      return;
+    }
+    await deps.notify(deps.appUrl ? `${text}\n${deps.appUrl}` : text);
+  }
+
   async function markAccountReauthRequired(
     uid: string,
     account: LinkedAccount,
   ) {
-    if (account.status !== "reauth_required") {
+    // 取得し直して、直前に別の処理で切り替わっていれば通知を重ねない
+    const current = (await stores.accounts.get(uid, account.id)) ?? account;
+    if (current.status !== "reauth_required") {
       await stores.accounts.upsert(uid, {
-        ...account,
+        ...current,
         status: "reauth_required",
         updatedAt: deps.now(),
       });
+      await notify(
+        `⚠️ ${current.email} の連携が切れました。アプリの「アカウント」タブから、このアカウントを追加し直してください（同じアカウントで連携すると設定はそのまま使えます）`,
+      );
     }
   }
 
@@ -557,6 +575,12 @@ export function createSyncService(deps: SyncDeps) {
         lastSyncAt: now,
         lastError: error,
       });
+      // 状態が変わったときだけ知らせる（10 分ごとの同期で同じ通知を繰り返さない）
+      if (error && !current.lastError) {
+        await notify(`⚠️ 同期エラー: ${current.name}\n${error}`);
+      } else if (!error && current.lastError) {
+        await notify(`✅ 同期が復旧しました: ${current.name}`);
+      }
     }
   }
 

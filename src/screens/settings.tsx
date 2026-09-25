@@ -15,6 +15,7 @@ import { PrimaryButton, Section } from "../components/form";
 import { appEnv } from "../config/env";
 import {
   api,
+  ApiError,
   describeApiError,
   describeSyncSummary,
   type StatusResponse,
@@ -59,6 +60,21 @@ export default function SettingsScreen() {
       notify("同期できませんでした", describeApiError(caught));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const testNotification = async () => {
+    try {
+      await api.testNotification();
+      notify("テスト通知を送りました", "Slack に届いたか確認してください。");
+    } catch (caught) {
+      notify(
+        "テスト通知を送れませんでした",
+        caught instanceof ApiError &&
+          caught.code === "notifications_not_configured"
+          ? "通知先の Slack が設定されていません（サーバーの SLACK_WEBHOOK_URL）。"
+          : describeApiError(caught),
+      );
     }
   };
 
@@ -188,6 +204,18 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         ))}
+      </Section>
+
+      <Section title="通知">
+        <View style={styles.row}>
+          <Text style={styles.help}>
+            同期エラーが起きたとき・復旧したとき、アカウントの連携が切れたときに
+            Slack へ通知します。
+          </Text>
+          <Pressable onPress={testNotification} accessibilityRole="button">
+            <Text style={styles.link}>Slack にテスト通知を送る</Text>
+          </Pressable>
+        </View>
       </Section>
 
       <Section title="アプリ">
