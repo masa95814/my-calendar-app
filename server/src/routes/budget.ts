@@ -34,6 +34,9 @@ const pushSchema = z.object({
   }),
 });
 
+/** この金額以下のしきい値は「課金が始まった」知らせとみなす（setup-budget-alert.sh が 1 円のしきい値を作る） */
+const FIRST_CHARGE_AMOUNT = 1;
+
 function formatMoney(amount: number, currency: string): string {
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
@@ -97,12 +100,17 @@ export function budgetRoutes(deps: BudgetRouteDeps) {
       m.alertThresholdExceeded,
     );
     const percent = Math.round(m.alertThresholdExceeded * 100);
-    logger.info("予算アラートを通知します", { key, percent });
+    const costs = `今月: ${formatMoney(m.costAmount, m.currencyCode)} / 予算: ${formatMoney(m.budgetAmount, m.currencyCode)}`;
+    // しきい値が 1 円以下（例: 予算 500 円の 0.2%）なら「課金が始まった = 無料枠を超えた」の知らせとして扱う
+    const firstCharge =
+      m.alertThresholdExceeded * m.budgetAmount <= FIRST_CHARGE_AMOUNT;
+    logger.info("予算アラートを通知します", { key, percent, firstCharge });
     await deps.notify?.(
-      `💰 請求額が予算の ${percent}% を超えました（${m.budgetDisplayName}）\n` +
-        `今月: ${formatMoney(m.costAmount, m.currencyCode)} / 予算: ${formatMoney(m.budgetAmount, m.currencyCode)}`,
-      // 予算を使い切ったときだけメンションする
-      { urgent: m.alertThresholdExceeded >= 1 },
+      firstCharge
+        ? `💸 無料枠を超えて課金が始まりました（${m.budgetDisplayName}）\n${costs}`
+        : `💰 請求額が予算の ${percent}% を超えました（${m.budgetDisplayName}）\n${costs}`,
+      // 課金が始まったときと、予算を使い切ったときはメンションする
+      { urgent: firstCharge || m.alertThresholdExceeded >= 1 },
     );
     return c.body(null, 204);
   });

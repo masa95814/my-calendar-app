@@ -8,7 +8,9 @@
 #   ./scripts/setup-budget-alert.sh <月の予算（円）>     # 例: ./scripts/setup-budget-alert.sh 500
 #
 # 前提: Cloud Run にデプロイ済みで、Slack 通知（SLACK_WEBHOOK_URL）が設定済みであること。
-# しきい値は 50% / 90% / 100%。請求先アカウントの管理者へのメール通知（既定）もそのまま残る。
+# しきい値は「1 円（無料枠を超えて課金が始まった）」/ 50% / 90% / 100%。
+# 請求先アカウントの管理者へのメール通知（既定）もそのまま残る。
+# あわせて、デプロイのたびに増えるコンテナイメージを自動で削除するルールを付ける（Artifact Registry の無料枠 0.5 GB を超えないように）。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -71,7 +73,10 @@ if ! grep -qE '^BUDGET_PUSH_SA_EMAIL=' "$ENV_FILE"; then
   printf '\n# 予算アラートを Pub/Sub から push するサービスアカウント（setup-budget-alert.sh が設定）\nBUDGET_PUSH_SA_EMAIL=%s\n' "$PUSH_SA" >>"$ENV_FILE"
 fi
 
-echo "▶ 5. 予算（月 ${AMOUNT} 円、50% / 90% / 100%）: 請求先 $BILLING_ACCOUNT"
+# 1 円に当たるしきい値（課金が始まった = 無料枠を超えた、の知らせ。アプリは 1 円以下のしきい値をそう扱う）
+FIRST_CHARGE="$(python3 -c "print(f'{1 / ${AMOUNT}:.6f}')")"
+
+echo "▶ 5. 予算（月 ${AMOUNT} 円、1 円 / 50% / 90% / 100%）: 請求先 $BILLING_ACCOUNT"
 BUDGET_ARGS=(--display-name="$BUDGET_NAME" --budget-amount="${AMOUNT}JPY"
   --notifications-rule-pubsub-topic="projects/${PROJECT}/topics/${TOPIC}")
 EXISTING="$(gcloud billing budgets list --billing-account="$BILLING_ACCOUNT" \
@@ -79,12 +84,24 @@ EXISTING="$(gcloud billing budgets list --billing-account="$BILLING_ACCOUNT" \
 if [[ -n "$EXISTING" ]]; then
   gcloud billing budgets update "$EXISTING" --billing-account="$BILLING_ACCOUNT" \
     "${BUDGET_ARGS[@]}" --clear-threshold-rules \
-    --add-threshold-rule=percent=0.5 --add-threshold-rule=percent=0.9 --add-threshold-rule=percent=1.0 >/dev/null
+    --add-threshold-rule=percent="$FIRST_CHARGE" --add-threshold-rule=percent=0.5 --add-threshold-rule=percent=0.9 --add-threshold-rule=percent=1.0 >/dev/null
 else
   gcloud billing budgets create --billing-account="$BILLING_ACCOUNT" "${BUDGET_ARGS[@]}" \
     --filter-projects="projects/${PROJECT}" \
-    --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 >/dev/null
+    --threshold-rule=percent="$FIRST_CHARGE" --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 >/dev/null
 fi
+
+echo "▶ 6. コンテナイメージの自動削除（新しい 5 個は残し、それより古く 7 日を過ぎたものを削除）"
+POLICY_FILE="$(mktemp)"
+cat >"$POLICY_FILE" <<'POLICY'
+[
+  { "name": "keep-recent", "action": { "type": "Keep" }, "mostRecentVersions": { "keepCount": 5 } },
+  { "name": "delete-old", "action": { "type": "Delete" }, "condition": { "olderThan": "7d" } }
+]
+POLICY
+gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
+  --location="$REGION" --policy="$POLICY_FILE" --no-dry-run >/dev/null
+rm -f "$POLICY_FILE"
 
 echo "✅ 完了。届くかの確認（Slack に 50% の通知が 1 件届く。実際の予算の記録とは別のキーを使う）:"
 echo "   gcloud pubsub topics publish $TOPIC --attribute=budgetId=manual-test \\"

@@ -63,6 +63,18 @@ describe("POST /webhooks/budget", () => {
     expect(h.urgentFlags).toEqual([false, false, true]);
   });
 
+  it("1 円のしきい値は「無料枠を超えて課金が始まった」として、メンション付きで知らせる", async () => {
+    const h = buildBudgetApp();
+    await push(h, { ...base, alertThresholdExceeded: 0.002, costAmount: 3 });
+    expect(h.notifications).toEqual([
+      "💸 無料枠を超えて課金が始まりました（カレンダー連携）\n今月: ￥3 / 予算: ￥500",
+    ]);
+    expect(h.urgentFlags).toEqual([true]);
+    // そのあとの 50% は通常の通知
+    await push(h, { ...base, alertThresholdExceeded: 0.5 });
+    expect(h.notifications[1]).toContain("予算の 50% を超えました");
+  });
+
   it("翌月は同じしきい値でも改めて知らせる", async () => {
     const h = buildBudgetApp();
     await push(h, { ...base, alertThresholdExceeded: 0.5 });
