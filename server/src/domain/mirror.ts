@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { CalendarEvent } from "../lib/calendar.js";
 import type { LinkedAccount } from "../repositories/index.js";
 import { isAllDay, MIRROR_KEYS } from "./filter.js";
-import type { SyncRule } from "./rules.js";
+import { DEFAULT_TITLES, type OutputKind, type SyncRule } from "./rules.js";
 
 // F4. 出力設定に従ってミラー予定（同期先に作る予定）を組み立てる
 
@@ -28,13 +28,34 @@ export function sourceTimeZone(
   );
 }
 
+/**
+ * この予定のミラーの種別と件名。タイトルが「もう一方の種別にするキーワード」に当たれば、
+ * もう一方の種別（予定あり ⇔ 不在）と、その種別用の件名にする
+ */
+export function mirrorKindFor(
+  event: CalendarEvent,
+  rule: SyncRule,
+): { kind: OutputKind; title: string } {
+  const keywords = rule.output.alternateKindKeywords ?? [];
+  const title = (event.summary ?? "").toLowerCase();
+  if (keywords.some((keyword) => title.includes(keyword.toLowerCase()))) {
+    const kind: OutputKind =
+      rule.output.kind === "busy" ? "outOfOffice" : "busy";
+    return {
+      kind,
+      title: rule.output.alternateKindTitle ?? DEFAULT_TITLES[kind],
+    };
+  }
+  return { kind: rule.output.kind, title: rule.output.title };
+}
+
 export function buildMirrorEvent(
   event: CalendarEvent,
   rule: SyncRule,
   context: MirrorContext,
 ): CalendarEvent {
-  const kind = rule.output.kind;
-  const summary = rule.output.title
+  const { kind, title } = mirrorKindFor(event, rule);
+  const summary = title
     .replaceAll("{title}", event.summary ?? "（タイトルなし）")
     .replaceAll("{account}", context.sourceAccount.email);
 

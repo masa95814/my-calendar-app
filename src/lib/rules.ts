@@ -102,6 +102,8 @@ export function defaultRuleInput(
       colorId: null,
       maxDurationMinutes: null,
       maxDurationKeywords: [],
+      alternateKindKeywords: [],
+      alternateKindTitle: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: DEFAULT_DECLINE_MESSAGE,
@@ -130,6 +132,8 @@ export function ruleToInput(rule: SyncRule): RuleInput {
       colorId: rule.output.colorId ?? null,
       maxDurationMinutes: rule.output.maxDurationMinutes ?? null,
       maxDurationKeywords: [...(rule.output.maxDurationKeywords ?? [])],
+      alternateKindKeywords: [...(rule.output.alternateKindKeywords ?? [])],
+      alternateKindTitle: rule.output.alternateKindTitle ?? null,
     },
   };
 }
@@ -169,6 +173,10 @@ export function reverseRuleInput(
       ...input.output,
       kind,
       title: titleWasDefault ? OUTPUT_KIND_LABELS[kind] : input.output.title,
+      // 個人宛てには「不在」を作れないので、種別の切り替えはやめる
+      ...(newTarget?.type === "personal"
+        ? { alternateKindKeywords: [], alternateKindTitle: null }
+        : { alternateKindKeywords: [...input.output.alternateKindKeywords] }),
     },
   };
 }
@@ -191,6 +199,11 @@ export function summarizeRule(rule: SyncRule): string {
   const always = rule.filters.alwaysIncludeKeywords ?? [];
   if (always.length > 0) {
     parts.push(`例外「${always.join("・")}」`);
+  }
+  const alternate = rule.output.alternateKindKeywords ?? [];
+  if (alternate.length > 0) {
+    const other = rule.output.kind === "busy" ? "outOfOffice" : "busy";
+    parts.push(`「${alternate.join("・")}」は${OUTPUT_KIND_LABELS[other]}`);
   }
   if (rule.output.maxDurationMinutes) {
     const capKeywords = rule.output.maxDurationKeywords ?? [];
