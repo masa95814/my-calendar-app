@@ -5,6 +5,8 @@
 # 使い方: ./hosting/deploy.sh [プロジェクト ID]
 #   サイトと公開するフォルダは環境変数で変えられる:
 #     SITE=<サイト ID>  PUBLIC_DIR=<フォルダ>  SPA=1（全パスを /index.html に振り分ける。Web 版アプリ用）
+#     CHANNEL=<チャネル ID>（例: pr-12）を付けると本番（live）ではなくプレビューチャネルに公開する。
+#       CHANNEL_TTL（秒、既定 7 日）で自動的に消える。公開した URL を最後の行に PREVIEW_URL=... で出す
 # firebase-tools は使わず、gcloud のログイン情報で Firebase Hosting の REST API を呼ぶ。
 set -euo pipefail
 
@@ -13,6 +15,8 @@ PROJECT="${1:-$(gcloud config get-value project 2>/dev/null)}"
 SITE="${SITE:-$PROJECT}"
 PUBLIC_DIR="$(cd "${PUBLIC_DIR:-public}" && pwd)"
 SPA="${SPA:-0}"
+CHANNEL="${CHANNEL:-}"
+CHANNEL_TTL="${CHANNEL_TTL:-604800}"
 API="https://firebasehosting.googleapis.com/v1beta1"
 
 # CI（デプロイ専用アカウント）では API の有効化権限を持たせていないため、SKIP_ENABLE=1 で飛ばす
@@ -24,10 +28,10 @@ ACCESS_TOKEN="$(gcloud auth print-access-token)"
 # gcloud 用に指定した Python（3.10 以上、HTTPS 対応）を優先する。システムの python3 が古い場合があるため
 PYTHON="${CLOUDSDK_PYTHON:-python3}"
 
-"$PYTHON" - "$PROJECT" "$SITE" "$API" "$ACCESS_TOKEN" "$PUBLIC_DIR" "$SPA" <<'PY'
-import gzip, hashlib, io, json, os, sys, urllib.request
+"$PYTHON" - "$PROJECT" "$SITE" "$API" "$ACCESS_TOKEN" "$PUBLIC_DIR" "$SPA" "$CHANNEL" "$CHANNEL_TTL" <<'PY'
+import gzip, hashlib, io, json, os, sys, urllib.error, urllib.request
 
-project, site, api, token, public_dir, spa = sys.argv[1:7]
+project, site, api, token, public_dir, spa, channel, channel_ttl = sys.argv[1:9]
 headers = {
     "Authorization": f"Bearer {token}",
     "x-goog-user-project": project,
@@ -77,6 +81,19 @@ for digest in populated.get("uploadRequiredHashes", []):
 
 # 4. 確定して公開
 call("PATCH", f"{api}/{version}?update_mask=status", {"status": "FINALIZED"})
+if channel:
+    # プレビューチャネル: 無ければ作り、あれば有効期限を延ばす（本番の live には触らない）
+    ttl = {"ttl": f"{channel_ttl}s"}
+    try:
+        info = call("POST", f"{api}/sites/{site}/channels?channelId={channel}", ttl)
+    except urllib.error.HTTPError as error:
+        if error.code != 409:
+            raise
+        info = call("PATCH", f"{api}/sites/{site}/channels/{channel}?update_mask=ttl", ttl)
+    call("POST", f"{api}/sites/{site}/channels/{channel}/releases?versionName={version}", {})
+    print(f"プレビューに公開しました（{len(files)} ファイル、{int(channel_ttl) // 86400} 日で消えます）")
+    print(f"PREVIEW_URL={info['url']}")
+    sys.exit(0)
 call("POST", f"{api}/sites/{site}/releases?versionName={version}", {})
 print(f"公開しました: https://{site}.web.app （{len(files)} ファイル）")
 if spa != "1":

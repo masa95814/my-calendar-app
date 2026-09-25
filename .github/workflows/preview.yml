@@ -1,0 +1,87 @@
+# develop 向けの PR ごとに、モック表示（見本のデータ）の Web 版アプリをプレビュー URL に公開する。
+# 本番のサーバーやデータには一切つながない。URL は PR にコメントし、7 日で自動的に消える。
+# Google Cloud へはプレビュー専用のプール・サービスアカウントで認証する（hosting/setup-preview-ci.sh で作成）。
+name: Preview
+
+on:
+  pull_request:
+    branches: [develop]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  preview:
+    name: プレビュー URL を公開
+    runs-on: ubuntu-latest
+    # フォークからの PR には Google Cloud の認証を渡さない（このリポジトリ内のブランチだけ）。
+    # hosting/setup-preview-ci.sh を実行する前（変数が無いとき）は何もしない
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.GCP_PREVIEW_SA != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PREVIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_PREVIEW_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: モック表示の Web 版アプリをビルド
+        run: |
+          npm ci
+          npx expo export --platform web --output-dir dist-mock --clear
+        env:
+          CI: "1"
+          EXPO_PUBLIC_MOCK: "1"
+
+      - name: プレビューチャネルに公開
+        id: deploy
+        run: |
+          SITE="${{ vars.GCP_PROJECT_ID }}-app" PUBLIC_DIR="$PWD/dist-mock" SPA=1 SKIP_ENABLE=1 \
+            CHANNEL="pr-${{ github.event.pull_request.number }}" \
+            ./hosting/deploy.sh "${{ vars.GCP_PROJECT_ID }}" | tee deploy.log
+          echo "url=$(grep '^PREVIEW_URL=' deploy.log | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: PR にプレビュー URL をコメント（前回のコメントは書き換える）
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = "<!-- preview-url -->";
+            const body = [
+              marker,
+              "### 🔍 プレビュー（モック表示）",
+              "",
+              process.env.PREVIEW_URL,
+              "",
+              `見本のデータで動く画面です。本物のカレンダーや同期設定にはつながっていません。` +
+                `コミット ${context.payload.pull_request.head.sha.slice(0, 7)} の内容で、7 日で自動的に消えます。`,
+            ].join("\n");
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const previous = comments.find((c) => c.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

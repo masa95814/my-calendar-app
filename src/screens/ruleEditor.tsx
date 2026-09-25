@@ -49,8 +49,47 @@ import type { RulesStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RulesStackParamList, "RuleEditor">;
 
+/** スマホなど狭い画面では、同期設定の編集を 1 画面として開く */
 export default function RuleEditorScreen({ navigation, route }: Props) {
   const { ruleId, sourceAccountId, targetAccountId } = route.params;
+  useEffect(() => {
+    navigation.setOptions({
+      title: ruleId ? "同期設定を編集" : "同期設定を追加",
+    });
+  }, [navigation, ruleId]);
+  return (
+    <RuleEditor
+      {...(ruleId ? { ruleId } : {})}
+      {...(sourceAccountId ? { sourceAccountId } : {})}
+      {...(targetAccountId ? { targetAccountId } : {})}
+      onDone={() => navigation.goBack()}
+    />
+  );
+}
+
+export type RuleEditorProps = {
+  /** 既存の同期設定を編集する。未指定なら新規作成 */
+  ruleId?: string;
+  /** 新規作成のときに最初から選んでおく送信元・同期先 */
+  sourceAccountId?: string;
+  targetAccountId?: string;
+  /** 保存・削除が終わったとき */
+  onDone: (result: "saved" | "deleted") => void;
+  /**
+   * 一覧の横に埋め込むとき（広い画面）。保存後も閉じずに「保存しました」を出し、
+   * 送信元・同期先は一覧で選ぶので変更できないようにする
+   */
+  embedded?: boolean;
+};
+
+/** 同期設定の編集フォーム（画面としても、一覧の横の埋め込みとしても使う） */
+export function RuleEditor({
+  ruleId,
+  sourceAccountId,
+  targetAccountId,
+  onDone,
+  embedded = false,
+}: RuleEditorProps) {
   const isNew = !ruleId;
 
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
@@ -66,12 +105,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    navigation.setOptions({
-      title: isNew ? "同期設定を追加" : "同期設定を編集",
-    });
-  }, [navigation, isNew]);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,7 +292,8 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
           }
         }
       }
-      navigation.goBack();
+      setSavedAt(new Date());
+      onDone("saved");
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 400) {
         const errors: Record<string, string> = {};
@@ -291,7 +326,7 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
     }
     try {
       await api.deleteRule(id);
-      navigation.goBack();
+      onDone("deleted");
     } catch (caught) {
       notify("削除できませんでした", describeApiError(caught));
     }
@@ -317,6 +352,12 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        <DirectionHeader
+          source={source}
+          target={target}
+          enabled={input.enabled}
+          isNew={isNew}
+        />
         <Section title="基本">
           <Field
             label="名前"
@@ -338,13 +379,16 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         </Section>
 
         <Section title="送信元（この予定を元に）">
-          <Field label="アカウント" error={fieldErrors["source.accountId"]}>
-            <Choice
-              options={accountOptions}
-              value={input.source.accountId}
-              onChange={selectSource}
-            />
-          </Field>
+          {/* 埋め込みのときは一覧で選んだ送信元に固定する */}
+          {embedded ? null : (
+            <Field label="アカウント" error={fieldErrors["source.accountId"]}>
+              <Choice
+                options={accountOptions}
+                value={input.source.accountId}
+                onChange={selectSource}
+              />
+            </Field>
+          )}
           {source ? (
             <Field
               label="対象カレンダー"
@@ -363,20 +407,22 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         </Section>
 
         <Section title="同期先（このカレンダーに作成）">
-          <Field
-            label="アカウント"
-            help="同期先はメインカレンダーに固定です（「不在」はメインカレンダーにしか作れません）"
-            error={fieldErrors["target.accountId"]}
-          >
-            <Choice
-              options={accountOptions.map((o) => ({
-                ...o,
-                disabled: o.value === input.source.accountId,
-              }))}
-              value={input.target.accountId}
-              onChange={selectTarget}
-            />
-          </Field>
+          {embedded ? null : (
+            <Field
+              label="アカウント"
+              help="同期先はメインカレンダーに固定です（「不在」はメインカレンダーにしか作れません）"
+              error={fieldErrors["target.accountId"]}
+            >
+              <Choice
+                options={accountOptions.map((o) => ({
+                  ...o,
+                  disabled: o.value === input.source.accountId,
+                }))}
+                value={input.target.accountId}
+                onChange={selectTarget}
+              />
+            </Field>
+          )}
           <Field label="同期範囲" help="今日から何日先までの予定を同期するか">
             <Choice
               options={WINDOW_DAYS_OPTIONS.map((d) => ({
@@ -642,6 +688,9 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
             onPress={save}
             disabled={saving}
           />
+          {embedded && savedAt && !saving ? (
+            <Text style={styles.saved}>保存しました</Text>
+          ) : null}
           {existing ? (
             <View style={styles.deleteButton}>
               <PrimaryButton
@@ -654,6 +703,56 @@ export default function RuleEditorScreen({ navigation, route }: Props) {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/** 「どこからどこへ」の同期設定かを、いちばん上に大きく出す */
+function DirectionHeader({
+  source,
+  target,
+  enabled,
+  isNew,
+}: {
+  source: LinkedAccount | undefined;
+  target: LinkedAccount | undefined;
+  enabled: boolean;
+  isNew: boolean;
+}) {
+  const color = isNew ? "#1A73E8" : enabled ? "#34A853" : "#9AA0A6";
+  return (
+    <View style={styles.direction}>
+      <AccountBox label="この予定を" account={source} />
+      <View style={styles.arrow}>
+        <View style={[styles.arrowLine, { backgroundColor: color }]} />
+        <Text style={[styles.arrowHead, { color }]}>▶</Text>
+        <Text style={styles.arrowState}>
+          {isNew ? "新規" : enabled ? "同期中" : "停止中"}
+        </Text>
+      </View>
+      <AccountBox label="ここに反映" account={target} />
+    </View>
+  );
+}
+
+function AccountBox({
+  label,
+  account,
+}: {
+  label: string;
+  account: LinkedAccount | undefined;
+}) {
+  return (
+    <View style={styles.accountBox}>
+      <Text style={styles.accountLabel}>{label}</Text>
+      <Text style={styles.accountName} numberOfLines={1}>
+        {account ? accountName(account) : "未選択"}
+      </Text>
+      {account ? (
+        <Text style={styles.accountEmail} numberOfLines={1}>
+          {account.email}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -703,5 +802,62 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     marginTop: 12,
+  },
+  saved: {
+    marginTop: 8,
+    textAlign: "center",
+    color: "#34A853",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  direction: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 8,
+  },
+  accountBox: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  accountLabel: {
+    fontSize: 11,
+    color: "#888888",
+  },
+  accountName: {
+    marginTop: 2,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2D4150",
+  },
+  accountEmail: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#888888",
+  },
+  arrow: {
+    width: 64,
+    alignItems: "center",
+  },
+  arrowLine: {
+    alignSelf: "stretch",
+    height: 3,
+    borderRadius: 2,
+  },
+  arrowHead: {
+    position: "absolute",
+    right: -4,
+    top: -8,
+    fontSize: 14,
+  },
+  arrowState: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#666666",
   },
 });

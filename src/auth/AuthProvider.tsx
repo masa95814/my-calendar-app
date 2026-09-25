@@ -17,6 +17,7 @@ import {
   type User,
 } from "firebase/auth";
 
+import { appEnv } from "../config/env";
 import { loginStartUrl } from "../lib/api";
 import { notify } from "../lib/dialog";
 import { describeAuthError } from "../lib/errorMessages";
@@ -98,13 +99,20 @@ export async function openAuthSession(
   return { kind: "success", params };
 }
 
+/** モック表示でのログイン中のユーザー（画面に出す項目だけを持つ） */
+const MOCK_USER = { uid: "mock", email: "me@example.com" } as User;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [initializing, setInitializing] = useState(true);
+  // モック表示ではログインを省き、最初からログイン済みとして扱う
+  const [user, setUser] = useState<User | null>(appEnv.mock ? MOCK_USER : null);
+  const [initializing, setInitializing] = useState(!appEnv.mock);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (appEnv.mock) {
+      return;
+    }
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setInitializing(false);
@@ -176,6 +184,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (appEnv.mock) {
+      notify("モック表示ではログアウトできません");
+      return;
+    }
     await firebaseSignOut(auth);
   }, []);
 
