@@ -305,6 +305,8 @@ export type TestHarness = {
   calendars: FakeCalendars;
   cipher: ReturnType<typeof createTokenCipher>;
   clock: { now: Date };
+  /** 送られた通知の本文 */
+  notifications: string[];
 };
 
 /** すべての依存を偽物にしたアプリを組み立てる */
@@ -319,6 +321,7 @@ export function buildTestApp(
   const calendars = createFakeCalendars(() => clock.now);
   let stateCounter = 0;
   let idCounter = 0;
+  const notifications: string[] = [];
 
   const { env, ...depOverrides } = overrides;
   const app = createApp({
@@ -332,10 +335,22 @@ export function buildTestApp(
     now: () => clock.now,
     randomState: () => `state-${++stateCounter}`,
     randomId: () => `id-${++idCounter}`,
+    notify: async (text) => {
+      notifications.push(text);
+    },
     ...depOverrides,
   });
 
-  return { app, stores, google, firebase, calendars, cipher, clock };
+  return {
+    app,
+    stores,
+    google,
+    firebase,
+    calendars,
+    cipher,
+    clock,
+    notifications,
+  };
 }
 
 /** テスト用の連携アカウント */
