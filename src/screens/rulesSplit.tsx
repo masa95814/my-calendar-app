@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
 import { accountName } from "../lib/accounts";
 import type { LinkedAccount, SyncRule } from "../lib/api";
@@ -16,7 +17,7 @@ import { RuleEditor } from "./ruleEditor";
 /** 行の高さと間隔。線の位置を計算するため固定にする */
 const ROW = 76;
 const GAP = 10;
-const LINK_WIDTH = 56;
+const LINK_WIDTH = 110;
 const GREEN = "#34A853";
 const GRAY = "#BDC1C6";
 
@@ -150,7 +151,10 @@ export function RulesSplitView({
   );
 }
 
-/** 同期元と同期先をつなぐ線。有効なら緑、無効なら灰色、未設定なら線なし */
+/**
+ * 同期元と同期先をつなぐ線。有効なら緑、無効なら灰色、未設定なら線なし。
+ * 同期元の右端から同期先の左端へ、S 字の曲線（3 次ベジェ）で結ぶ
+ */
 function Links({
   sourceIndex,
   targets,
@@ -161,7 +165,6 @@ function Links({
   height: number;
 }) {
   const from = centerOf(sourceIndex);
-  const mid = LINK_WIDTH / 2;
   const linked = targets
     .map((entry, index) => ({ entry, to: centerOf(index) }))
     .filter(({ entry }) => entry.rule)
@@ -171,55 +174,25 @@ function Links({
         Number(a.entry.rule?.enabled ?? false) -
         Number(b.entry.rule?.enabled ?? false),
     );
-  const anyEnabled = linked.some(({ entry }) => entry.rule?.enabled);
+  // 制御点を横方向に寄せるほど、両端が水平に近い滑らかな曲線になる
+  const bend = LINK_WIDTH * 0.55;
   return (
-    <View style={{ width: LINK_WIDTH, height }}>
-      {linked.length > 0 ? (
-        <View
-          style={[
-            styles.line,
-            {
-              left: 0,
-              top: from - 1,
-              width: mid + 1,
-              height: 2,
-              backgroundColor: anyEnabled ? GREEN : GRAY,
-            },
-          ]}
-        />
-      ) : null}
+    <Svg width={LINK_WIDTH} height={height}>
       {linked.map(({ entry, to }) => {
-        const color = entry.rule?.enabled ? GREEN : GRAY;
+        const enabled = entry.rule?.enabled ?? false;
         return (
-          <View key={entry.target.id}>
-            <View
-              style={[
-                styles.line,
-                {
-                  left: mid - 1,
-                  top: Math.min(from, to) - 1,
-                  width: 2,
-                  height: Math.abs(to - from) + 2,
-                  backgroundColor: color,
-                },
-              ]}
-            />
-            <View
-              style={[
-                styles.line,
-                {
-                  left: mid - 1,
-                  top: to - 1,
-                  width: LINK_WIDTH - mid + 1,
-                  height: 2,
-                  backgroundColor: color,
-                },
-              ]}
-            />
-          </View>
+          <Path
+            key={entry.target.id}
+            d={`M 0 ${from} C ${bend} ${from}, ${LINK_WIDTH - bend} ${to}, ${LINK_WIDTH} ${to}`}
+            stroke={enabled ? GREEN : GRAY}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            {...(enabled ? {} : { strokeDasharray: "4 4" })}
+            fill="none"
+          />
         );
       })}
-    </View>
+    </Svg>
   );
 }
 
@@ -283,7 +256,7 @@ const styles = StyleSheet.create({
   listPane: {
     flexGrow: 0,
     flexShrink: 0,
-    width: 560,
+    width: 620,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: "#E0E0E0",
   },
@@ -372,10 +345,6 @@ const styles = StyleSheet.create({
   },
   dotStopped: {
     backgroundColor: "#9AA0A6",
-  },
-  line: {
-    position: "absolute",
-    borderRadius: 1,
   },
   editorPane: {
     flex: 1,
