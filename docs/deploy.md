@@ -91,6 +91,10 @@ cd server
   3. Cloud Run に渡す: `gcloud run services update my-calendar-app-server --region asia-northeast1 --update-secrets SLACK_WEBHOOK_URL=slack-webhook-url:latest`（以後の自動デプロイ・`deploy.sh` でも引き継ぐ）
   4. （任意）同期エラーと連携切れの通知で自分にメンションする: Slack のプロフィール →「︙」→「メンバー ID をコピー」で ID（`U` から始まる）を控え、`server/.env` に `SLACK_MENTION_USER_ID=<ID>` を書いたうえで `gcloud run services update my-calendar-app-server --region asia-northeast1 --update-env-vars SLACK_MENTION_USER_ID=<ID>`（`.env` に書いておくと `deploy.sh` でも引き継ぐ）。復旧の通知にはメンションしない
   5. アプリの設定タブの「Slack にテスト通知を送る」で届くか確認する（テスト通知はメンション付き）
+- **予算アラート（Slack）**: 請求額が 1 円に達したとき（無料枠を超えて課金が始まった）と、月の予算の 50% / 90% / 100% を超えたときに Slack に通知する（1 円と 100% はメンション付き。請求先の管理者へのメールも既定どおり届く）。予算 → Pub/Sub → Cloud Run の `/webhooks/budget`（push の ID トークンを検証）→ Slack。予算のメッセージは 1 日に何度も届くため、月ごとにまだ知らせていないしきい値だけを知らせる（Firestore の `budgetAlerts`）
+  - 作成・金額の変更: `cd server && ./scripts/setup-budget-alert.sh <月の予算（円）>`（何度実行してもよい）
+  - 届くかの確認: スクリプトの最後に出るコマンドで、テスト用のメッセージを Pub/Sub に送る
+  - 同じスクリプトで、デプロイのたびに増えるコンテナイメージ（Artifact Registry `cloud-run-source-deploy`、無料枠 0.5 GB）の自動削除ルールも付ける（新しい 5 個は残し、それより古く 7 日を過ぎたものを削除）
 - **費用**: 個人利用の規模（10 分ごとの同期、4 アカウント程度）なら Cloud Run・Firestore・Scheduler とも無料枠に収まる想定。Cloud Scheduler は 3 ジョブまで無料
 
 ## トラブルシューティング

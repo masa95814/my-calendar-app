@@ -47,6 +47,8 @@ WEB_APP_URL="$(env_value WEB_APP_URL || true)"
 SLACK_WEBHOOK_URL="$(env_value SLACK_WEBHOOK_URL || true)"
 # 同期エラーと連携切れの通知でメンションする Slack のメンバー ID（任意）
 SLACK_MENTION_USER_ID="$(env_value SLACK_MENTION_USER_ID || true)"
+# 予算アラートを Pub/Sub から push するサービスアカウント（setup-budget-alert.sh が .env に書く。任意）
+BUDGET_PUSH_SA_EMAIL="$(env_value BUDGET_PUSH_SA_EMAIL || true)"
 if [[ -n "$WEB_APP_URL" && ",${RETURN_PREFIXES}," != *",${WEB_APP_URL},"* ]]; then
   RETURN_PREFIXES="${RETURN_PREFIXES},${WEB_APP_URL}"
 fi
@@ -126,6 +128,9 @@ deploy() {
   local env_vars="NODE_ENV=production|OWNER_EMAILS=${OWNER_EMAILS}|GOOGLE_OAUTH_CLIENT_ID=${CLIENT_ID}|APP_RETURN_URL_PREFIXES=${RETURN_PREFIXES}|WEB_ALLOWED_ORIGINS=${WEB_APP_URL}"
   if [[ -n "$SLACK_MENTION_USER_ID" ]]; then
     env_vars="${env_vars}|SLACK_MENTION_USER_ID=${SLACK_MENTION_USER_ID}"
+  fi
+  if [[ -n "$BUDGET_PUSH_SA_EMAIL" ]]; then
+    env_vars="${env_vars}|BUDGET_PUSH_SA_EMAIL=${BUDGET_PUSH_SA_EMAIL}"
   fi
   if [[ -n "$base_url" ]]; then
     env_vars="${env_vars}|PUBLIC_BASE_URL=${base_url}|OAUTH_REDIRECT_URI=${base_url}/auth/google/callback"

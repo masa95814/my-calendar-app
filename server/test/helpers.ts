@@ -54,6 +54,7 @@ export type MemoryStores = Stores & {
   mirrors: Stores["mirrors"] & { data: Map<string, MirrorRecord> };
   syncStates: Stores["syncStates"] & { data: Map<string, SyncState> };
   channels: Stores["channels"] & { data: Map<string, WatchChannel> };
+  budgetAlerts: Stores["budgetAlerts"] & { data: Map<string, number> };
   logins: { uid: string; email: string; at: Date }[];
 };
 
@@ -65,6 +66,7 @@ export function createMemoryStores(): MemoryStores {
   const mirrorsData = new Map<string, MirrorRecord>();
   const syncStatesData = new Map<string, SyncState>();
   const channelsData = new Map<string, WatchChannel>();
+  const budgetAlertsData = new Map<string, number>();
   const logins: MemoryStores["logins"] = [];
   const key = (uid: string, id: string) => `${uid}/${id}`;
   const ofUser = <T>(map: Map<string, T>, uid: string): T[] =>
@@ -212,6 +214,15 @@ export function createMemoryStores(): MemoryStores {
       },
       async delete(channelId) {
         channelsData.delete(channelId);
+      },
+    },
+    budgetAlerts: {
+      data: budgetAlertsData,
+      async getNotifiedThreshold(key) {
+        return budgetAlertsData.get(key);
+      },
+      async setNotifiedThreshold(key, threshold) {
+        budgetAlertsData.set(key, threshold);
       },
     },
   };

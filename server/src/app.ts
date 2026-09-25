@@ -17,6 +17,7 @@ import {
 import type { LinkedAccount, Stores } from "./repositories/index.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { authRoutes, type FirebaseUserService } from "./routes/auth.js";
+import { budgetRoutes, type VerifyPushToken } from "./routes/budget.js";
 import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
 import { notificationRoutes } from "./routes/notifications.js";
@@ -42,6 +43,8 @@ export type AppDependencies = {
   randomId?: () => string;
   /** 運用上の通知。未指定なら SLACK_WEBHOOK_URL があれば Slack に送る */
   notify?: Notify;
+  /** 予算アラートの Pub/Sub push の ID トークンを確かめる（未指定なら予算アラートの受け口は無効） */
+  verifyPushToken?: VerifyPushToken;
 };
 
 /**
@@ -89,6 +92,7 @@ export function createApp(deps: AppDependencies) {
   app.route("/", healthRoutes);
   app.route("/", authRoutes(shared));
   app.route("/", webhookRoutes(shared));
+  app.route("/", budgetRoutes(shared));
   // Cloud Scheduler 用（共有シークレットで保護）
   app.route("/", taskRoutes(shared));
 
