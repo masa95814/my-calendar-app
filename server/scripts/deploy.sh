@@ -43,6 +43,8 @@ RETURN_PREFIXES="$(env_value APP_RETURN_URL_PREFIXES || true)"
 RETURN_PREFIXES="${RETURN_PREFIXES:-mycalendarapp://,exp://}"
 # Web 版アプリを公開している URL（例: https://<サイト>.web.app）。CORS とログイン後の戻り先に許可する
 WEB_APP_URL="$(env_value WEB_APP_URL || true)"
+# 同期エラーなどを通知する Slack の Incoming Webhook の URL（任意）
+SLACK_WEBHOOK_URL="$(env_value SLACK_WEBHOOK_URL || true)"
 if [[ -n "$WEB_APP_URL" && ",${RETURN_PREFIXES}," != *",${WEB_APP_URL},"* ]]; then
   RETURN_PREFIXES="${RETURN_PREFIXES},${WEB_APP_URL}"
 fi
@@ -94,6 +96,14 @@ fi
 put_secret google-oauth-client-secret "$CLIENT_SECRET"
 put_secret token-encryption-key "$TOKEN_KEY"
 put_secret tasks-secret "$TASKS_SECRET"
+if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+  put_secret slack-webhook-url "$SLACK_WEBHOOK_URL"
+fi
+# Slack の URL は .env に無くても、シークレットが作られていれば使う（gcloud で直接作った場合）
+SECRETS="GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,TASKS_SECRET=tasks-secret:latest"
+if gcloud secrets describe slack-webhook-url >/dev/null 2>&1; then
+  SECRETS="${SECRETS},SLACK_WEBHOOK_URL=slack-webhook-url:latest"
+fi
 
 echo "▶ 3. 実行サービスアカウントに権限を付与"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
@@ -127,7 +137,7 @@ deploy() {
     --memory 512Mi \
     --timeout 300 \
     --set-env-vars "^|^${env_vars}" \
-    --set-secrets "GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,TASKS_SECRET=tasks-secret:latest" \
+    --set-secrets "$SECRETS" \
     --quiet
 }
 

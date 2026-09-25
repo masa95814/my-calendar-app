@@ -255,6 +255,33 @@ describe("同期エンジン: 差分同期（/tasks/poll）", () => {
       (await h.stores.rules.get("owner-uid", rule.id))?.lastError,
     ).toContain("invalid_grant");
   });
+
+  it("エラーになったとき・再認証が必要になったときだけ通知し、続く同期では繰り返さない", async () => {
+    const { h, rule } = await setup();
+    h.calendars.revoke("acc-a");
+    await poll(h);
+    expect(h.notifications).toHaveLength(2);
+    expect(h.notifications[0]).toContain(
+      "a@company-a.example の連携が切れました",
+    );
+    expect(h.notifications[1]).toContain(`同期エラー: ${rule.name}`);
+    expect(h.notifications[1]).toContain("invalid_grant");
+
+    await poll(h);
+    expect(h.notifications).toHaveLength(2);
+  });
+
+  it("エラーから戻ったら復旧を通知する", async () => {
+    const { h, rule } = await setup();
+    const saved = await h.stores.rules.get("owner-uid", rule.id);
+    await h.stores.rules.update("owner-uid", {
+      ...saved!,
+      lastError: "同期先への反映に失敗: 一時的なエラー",
+    });
+    h.calendars.put("acc-a", "primary", meeting("evt-2"));
+    await poll(h);
+    expect(h.notifications).toEqual([`✅ 同期が復旧しました: ${rule.name}`]);
+  });
 });
 
 describe("同期エンジン: 同期設定の変更", () => {

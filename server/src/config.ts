@@ -56,6 +56,9 @@ const envSchema = z
     // 未設定ならポーリングだけで同期する（ローカル開発）
     PUBLIC_BASE_URL: z.string().url().optional(),
 
+    // 同期エラーや再認証が必要になったときに通知する Slack の Incoming Webhook の URL。未設定なら通知しない
+    SLACK_WEBHOOK_URL: z.string().url().optional(),
+
     // watch チャネルの有効期間（秒）。Google の上限に合わせて既定は 7 日
     WATCH_TTL_SECONDS: z.coerce
       .number()

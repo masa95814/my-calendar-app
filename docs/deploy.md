@@ -29,13 +29,14 @@ Apple シリコンの Mac では、gcloud 用に Python 3.10 以上を `CLOUDSDK
 
 `server/.env` に次の値が入っていることを確認します（ローカル開発で使っているものと同じ）。
 
-| 変数                                                    | 内容                                                       |
-| ------------------------------------------------------- | ---------------------------------------------------------- |
-| `GOOGLE_CLOUD_PROJECT`                                  | `my-calendar-app-509416`                                   |
-| `OWNER_EMAILS`                                          | アプリにログインできるメールアドレス                       |
-| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | ウェブ用 OAuth クライアント                                |
-| `TOKEN_ENCRYPTION_KEY`                                  | リフレッシュトークンの暗号鍵                               |
-| `TASKS_SECRET`                                          | 任意。空ならスクリプトが生成して Secret Manager に保存する |
+| 変数                                                    | 内容                                                                                  |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `GOOGLE_CLOUD_PROJECT`                                  | `my-calendar-app-509416`                                                              |
+| `OWNER_EMAILS`                                          | アプリにログインできるメールアドレス                                                  |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | ウェブ用 OAuth クライアント                                                           |
+| `TOKEN_ENCRYPTION_KEY`                                  | リフレッシュトークンの暗号鍵                                                          |
+| `TASKS_SECRET`                                          | 任意。空ならスクリプトが生成して Secret Manager に保存する                            |
+| `SLACK_WEBHOOK_URL`                                     | 任意。同期エラーなどを通知する Slack の Incoming Webhook の URL（下の「Slack 通知」） |
 
 ## 2. デプロイ
 
@@ -80,6 +81,15 @@ cd server
 - **ログ**: `gcloud run services logs read my-calendar-app-server --region asia-northeast1 --limit 100`
 - **手動で同期**: アプリの設定タブの「今すぐ同期」、または `gcloud scheduler jobs run calendar-poll --location asia-northeast1`
 - **再デプロイ**: `cd server && ./scripts/deploy.sh`
+- **Slack 通知**: 同期設定がエラーになったとき・復旧したとき、アカウントの連携が切れた（再認証が必要）ときに、Slack の Incoming Webhook へ通知する。状態が変わったときだけ送るので、10 分ごとの同期で同じ通知は繰り返さない
+  1. Slack で Incoming Webhook を作り、URL（`https://hooks.slack.com/services/...`）を控える
+  2. シークレットに登録する（URL は履歴に残らないよう `read -s` で入力する）:
+     ```bash
+     read -rs SLACK_URL && printf '%s' "$SLACK_URL" | gcloud secrets create slack-webhook-url --replication-policy=automatic --data-file=- ; unset SLACK_URL
+     ```
+     URL を変えるときは `gcloud secrets versions add slack-webhook-url --data-file=-`
+  3. Cloud Run に渡す: `gcloud run services update my-calendar-app-server --region asia-northeast1 --update-secrets SLACK_WEBHOOK_URL=slack-webhook-url:latest`（以後の自動デプロイ・`deploy.sh` でも引き継ぐ）
+  4. アプリの設定タブの「Slack にテスト通知を送る」で届くか確認する
 - **費用**: 個人利用の規模（10 分ごとの同期、4 アカウント程度）なら Cloud Run・Firestore・Scheduler とも無料枠に収まる想定。Cloud Scheduler は 3 ジョブまで無料
 
 ## トラブルシューティング

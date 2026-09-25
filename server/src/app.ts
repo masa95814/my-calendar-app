@@ -8,6 +8,7 @@ import type { CalendarClient } from "./lib/calendar.js";
 import type { TokenCipher } from "./lib/crypto.js";
 import type { GoogleOAuth } from "./lib/google.js";
 import { logger } from "./lib/logger.js";
+import { createSlackNotifier, type Notify } from "./lib/slack.js";
 import {
   requireOwner,
   type AuthEnv,
@@ -18,6 +19,7 @@ import { accountRoutes } from "./routes/accounts.js";
 import { authRoutes, type FirebaseUserService } from "./routes/auth.js";
 import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { ruleRoutes } from "./routes/rules.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { webhookRoutes } from "./routes/webhooks.js";
@@ -38,6 +40,8 @@ export type AppDependencies = {
   randomState?: () => string;
   /** watch チャネルの ID などを生成する（テストで固定する） */
   randomId?: () => string;
+  /** 運用上の通知。未指定なら SLACK_WEBHOOK_URL があれば Slack に送る */
+  notify?: Notify;
 };
 
 /**
@@ -46,6 +50,11 @@ export type AppDependencies = {
  */
 export function createApp(deps: AppDependencies) {
   const now = deps.now ?? (() => new Date());
+  const notify =
+    deps.notify ??
+    (deps.config.SLACK_WEBHOOK_URL
+      ? createSlackNotifier(deps.config.SLACK_WEBHOOK_URL)
+      : undefined);
   const sync = createSyncService({
     stores: deps.stores,
     calendarFor: deps.calendarFor,
@@ -55,6 +64,11 @@ export function createApp(deps: AppDependencies) {
       ? { publicBaseUrl: deps.config.PUBLIC_BASE_URL }
       : {}),
     watchTtlSeconds: deps.config.WATCH_TTL_SECONDS,
+    ...(notify ? { notify } : {}),
+    // 通知に付けるアプリの URL（Web 版を公開していれば、その先頭のオリジン）
+    ...(deps.config.WEB_ALLOWED_ORIGINS[0]
+      ? { appUrl: deps.config.WEB_ALLOWED_ORIGINS[0] }
+      : {}),
   });
   const shared = {
     ...deps,
@@ -62,6 +76,7 @@ export function createApp(deps: AppDependencies) {
     randomState:
       deps.randomState ?? (() => randomBytes(24).toString("base64url")),
     sync,
+    ...(notify ? { notify } : {}),
   };
 
   const app = new Hono();
@@ -108,6 +123,7 @@ export function createApp(deps: AppDependencies) {
   api.route("/", accountRoutes(shared));
   api.route("/", ruleRoutes(shared));
   api.route("/", eventRoutes(shared));
+  api.route("/", notificationRoutes(shared));
   app.route("/api", api);
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
