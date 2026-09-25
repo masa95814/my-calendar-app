@@ -654,3 +654,38 @@ describe("同期エンジン: Firestore の読み取り回数", () => {
     expect(mirrorsInB(h)).toHaveLength(2);
   });
 });
+
+describe("同期エンジン: もう一方の種別にするキーワード", () => {
+  it("件名が変わってキーワードに当たるようになったら、ミラーを作り直して種別を切り替える", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    await createRule(h, {
+      ...ruleInput,
+      output: {
+        kind: "busy",
+        title: "会社A",
+        alternateKindKeywords: ["外出"],
+        alternateKindTitle: "外出中",
+      },
+    });
+    expect(mirrorsInB(h)[0]).toMatchObject({ summary: "会社A" });
+    expect(mirrorsInB(h)[0]?.eventType).toBeUndefined();
+
+    h.calendars.put(
+      "acc-a",
+      "primary",
+      meeting("evt-1", { summary: "外出（顧客訪問）" }),
+    );
+    expect(await poll(h)).toMatchObject({ updated: 1, errors: [] });
+    const [mirror] = mirrorsInB(h);
+    expect(mirrorsInB(h)).toHaveLength(1);
+    expect(mirror).toMatchObject({
+      summary: "外出中",
+      eventType: "outOfOffice",
+    });
+    const [record] = [...h.stores.mirrors.data.values()];
+    expect(record?.kind).toBe("outOfOffice");
+    expect(record?.targetEventId).toBe(mirror?.id);
+  });
+});

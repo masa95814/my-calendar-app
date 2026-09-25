@@ -4,6 +4,7 @@ import {
   buildMirrorEvent,
   capEnd,
   fingerprintOf,
+  mirrorKindFor,
 } from "../src/domain/mirror.js";
 import type { SyncRule } from "../src/domain/rules.js";
 import type { CalendarEvent } from "../src/lib/calendar.js";
@@ -60,6 +61,8 @@ function rule(output: Partial<SyncRule["output"]> = {}): SyncRule {
       colorId: null,
       maxDurationMinutes: null,
       maxDurationKeywords: [],
+      alternateKindKeywords: [],
+      alternateKindTitle: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -254,6 +257,67 @@ describe("長さの上限", () => {
     expect(
       capEnd("2026-09-24T10:00:00-05:30", "2026-09-24T12:00:00-05:30", 45),
     ).toBe("2026-09-24T10:45:00-05:30");
+  });
+});
+
+describe("もう一方の種別にするキーワード", () => {
+  it("キーワードに当たる予定は、もう一方の種別とその件名で作る", () => {
+    const busyRule = rule({
+      kind: "busy",
+      title: "会社A",
+      alternateKindKeywords: ["外出"],
+      alternateKindTitle: "外出中",
+    });
+    const out = buildMirrorEvent(
+      { ...timed, summary: "外出（顧客訪問）" },
+      busyRule,
+      context,
+    );
+    expect(out.summary).toBe("外出中");
+    expect(out.eventType).toBe("outOfOffice");
+    expect(out.outOfOfficeProperties?.autoDeclineMode).toBe(
+      "declineOnlyNewConflictingInvitations",
+    );
+    // 当たらない予定は、設定どおりの種別と件名
+    const normal = buildMirrorEvent(timed, busyRule, context);
+    expect(normal.summary).toBe("会社A");
+    expect(normal.eventType).toBeUndefined();
+    expect(mirrorKindFor(timed, busyRule).kind).toBe("busy");
+  });
+
+  it("件名が未設定なら、その種別の既定の件名。不在 → 予定ありにも切り替えられる", () => {
+    expect(
+      mirrorKindFor(
+        { ...timed, summary: "外出" },
+        rule({ kind: "busy", alternateKindKeywords: ["外出"] }),
+      ),
+    ).toEqual({ kind: "outOfOffice", title: "不在" });
+    const oooRule = rule({
+      kind: "outOfOffice",
+      alternateKindKeywords: ["社内"],
+    });
+    const out = buildMirrorEvent(
+      { ...timed, summary: "社内定例" },
+      oooRule,
+      context,
+    );
+    expect(out.summary).toBe("予定あり");
+    expect(out.eventType).toBeUndefined();
+  });
+
+  it("項目が無い古い設定でも、設定どおりの種別で作る", () => {
+    const base = rule({ kind: "busy", title: "会社A" });
+    const {
+      alternateKindKeywords: _a,
+      alternateKindTitle: _b,
+      ...legacy
+    } = base.output;
+    expect(
+      mirrorKindFor(
+        { ...timed, summary: "外出" },
+        { ...base, output: legacy as SyncRule["output"] },
+      ),
+    ).toEqual({ kind: "busy", title: "会社A" });
   });
 });
 

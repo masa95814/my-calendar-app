@@ -110,7 +110,16 @@ function initialRules(accounts: LinkedAccount[]): SyncRule[] {
         maxDurationKeywords: ["定例"],
       },
     })),
-    make("rule-b-a", "acc-b", "acc-a", twoOrMore),
+    make("rule-b-a", "acc-b", "acc-a", (i) => ({
+      ...twoOrMore(i),
+      output: {
+        ...i.output,
+        kind: "busy",
+        title: "会社B",
+        alternateKindKeywords: ["外出"],
+        alternateKindTitle: "外出中",
+      },
+    })),
     make(
       "rule-main-a",
       "acc-main",
@@ -142,7 +151,10 @@ function buildEvents(
       [10, 60, "定例ミーティング"],
       [14, 30, "顧客打ち合わせ"],
     ],
-    "acc-b": [[11, 60, "開発定例"]],
+    "acc-b": [
+      [11, 60, "開発定例"],
+      [15, 90, "外出（顧客訪問）"],
+    ],
     "acc-c": [[16, 30, "週次レビュー"]],
     "acc-main": [[19, 60, "面談"]],
   };
@@ -187,16 +199,28 @@ function buildEvents(
               rule.output.maxDurationKeywords.some((k) => summary.includes(k)))
               ? Math.min(minutes, rule.output.maxDurationMinutes)
               : minutes;
+          // もう一方の種別にするキーワードに当たれば、種別と件名を切り替える
+          const alternate = rule.output.alternateKindKeywords.some((k) =>
+            summary.includes(k),
+          );
+          const kind = alternate
+            ? rule.output.kind === "busy"
+              ? "outOfOffice"
+              : "busy"
+            : rule.output.kind;
+          const title = alternate
+            ? (rule.output.alternateKindTitle ??
+              (kind === "outOfOffice" ? "不在" : "予定あり"))
+            : rule.output.title;
           events.push({
             accountId: target.id,
             accountEmail: target.email,
             id: `${id}-${rule.id}`,
-            summary: rule.output.title,
+            summary: title,
             start: start.toISOString(),
             end: new Date(start.getTime() + capped * 60 * 1000).toISOString(),
             allDay: false,
-            eventType:
-              rule.output.kind === "outOfOffice" ? "outOfOffice" : "default",
+            eventType: kind === "outOfOffice" ? "outOfOffice" : "default",
             isMirror: true,
             mirrorRuleId: rule.id,
             hangoutLink: null,

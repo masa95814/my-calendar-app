@@ -124,6 +124,8 @@ describe("POST /api/rules", () => {
       colorId: null,
       maxDurationMinutes: null,
       maxDurationKeywords: [],
+      alternateKindKeywords: [],
+      alternateKindTitle: null,
       allDaySourceHandling: "fullDay",
       autoDeclineMode: "declineOnlyNewConflictingInvitations",
       declineMessage: "別件の予定があるため参加できません。",
@@ -206,6 +208,20 @@ describe("POST /api/rules", () => {
     expect(res.status).toBe(400);
     expect((body.details as { code: string }[])[0]?.code).toBe(
       "out_of_office_not_available_for_personal",
+    );
+  });
+
+  it("個人アカウント宛てでは、種別を切り替えるキーワードは 400（不在を作れないため）", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    const { res, body } = await createRule(h, {
+      ...minimalInput,
+      target: { accountId: "acc-p" },
+      output: { kind: "busy", alternateKindKeywords: ["外出"] },
+    });
+    expect(res.status).toBe(400);
+    expect((body.details as { code: string }[])[0]?.code).toBe(
+      "alternate_kind_not_available_for_personal",
     );
   });
 

@@ -9,6 +9,7 @@ import {
 import {
   buildMirrorEvent,
   fingerprintOf,
+  mirrorKindFor,
   sourceTimeZone,
 } from "../domain/mirror.js";
 import type { SyncRule } from "../domain/rules.js";
@@ -267,6 +268,8 @@ export function createSyncService(deps: SyncDeps) {
       return;
     }
 
+    // 予定ごとに種別が変わることがある（もう一方の種別にするキーワード）
+    const { kind } = mirrorKindFor(event, rule);
     const body = buildMirrorEvent(event, rule, {
       sourceAccount: group.account,
       sourceCalendarId: group.calendarId,
@@ -312,7 +315,7 @@ export function createSyncService(deps: SyncDeps) {
       targetAccountId: targetAccount.id,
       targetCalendarId: TARGET_CALENDAR_ID,
       targetEventId,
-      kind: rule.output.kind,
+      kind,
       fingerprint,
       sourceEndAt: eventEnd(event) ?? null,
       updatedAt: deps.now(),
@@ -325,7 +328,7 @@ export function createSyncService(deps: SyncDeps) {
       return;
     }
 
-    if (existing.kind !== rule.output.kind) {
+    if (existing.kind !== kind) {
       // eventType は後から変更できないため、作り直す
       await targetClient.deleteEvent(
         existing.targetCalendarId,

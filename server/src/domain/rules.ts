@@ -91,6 +91,19 @@ export const ruleOutputSchema = z.object({
    * 例: 「農活」なら「【農活】WEB・SF開発定例」だけを切り詰め、「SalesforceMTG」はそのままにする
    */
   maxDurationKeywords: keywordList,
+  /**
+   * タイトルにいずれかを含む予定は、もう一方の種別で作る（種別が「予定あり」なら「不在」、「不在」なら「予定あり」）。
+   * 例: 種別は「予定あり」、「外出」を含む予定だけ「不在」。同期先が個人のときは使えない
+   */
+  alternateKindKeywords: keywordList,
+  /** もう一方の種別で作るときの件名。{title} {account} を使える。null ならその種別の既定（「不在」「予定あり」） */
+  alternateKindTitle: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .nullable()
+    .default(null),
   /** 終日の元予定を 0:00〜24:00 の時間指定に変換するか、同期しないか */
   allDaySourceHandling: allDaySourceHandlingSchema.default("fullDay"),
   /** 不在のみ有効 */
@@ -148,7 +161,8 @@ export type RuleValidationError = {
     | "target_account_not_found"
     | "same_account"
     | "unknown_source_calendar"
-    | "out_of_office_not_available_for_personal";
+    | "out_of_office_not_available_for_personal"
+    | "alternate_kind_not_available_for_personal";
   message: string;
 };
 
@@ -201,6 +215,17 @@ export function validateRuleAgainstAccounts(
       code: "out_of_office_not_available_for_personal",
       message:
         "個人の Google アカウントには「不在」を作成できません。「予定あり」を選んでください",
+    });
+  }
+  if (
+    target &&
+    target.type === "personal" &&
+    input.output.alternateKindKeywords.length > 0
+  ) {
+    errors.push({
+      code: "alternate_kind_not_available_for_personal",
+      message:
+        "個人の Google アカウントには「不在」を作成できないため、種別を切り替えるキーワードは使えません",
     });
   }
   return errors;

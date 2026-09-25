@@ -100,6 +100,7 @@ export function RuleEditor({
   const [includeText, setIncludeText] = useState("");
   const [alwaysText, setAlwaysText] = useState("");
   const [capText, setCapText] = useState("");
+  const [alternateText, setAlternateText] = useState("");
   const [alsoReverse, setAlsoReverse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,6 +134,7 @@ export function RuleEditor({
         setIncludeText(initial.filters.includeKeywords.join(", "));
         setAlwaysText(initial.filters.alwaysIncludeKeywords.join(", "));
         setCapText(initial.output.maxDurationKeywords.join(", "));
+        setAlternateText(initial.output.alternateKindKeywords.join(", "));
       } catch (caught) {
         if (!cancelled) {
           setLoadError(describeApiError(caught));
@@ -245,6 +247,10 @@ export function RuleEditor({
       ...input.output,
       title: input.output.title.trim() || OUTPUT_KIND_LABELS[input.output.kind],
       maxDurationKeywords: parseKeywords(capText),
+      // 個人宛てには「不在」を作れないので、種別の切り替えは送らない
+      alternateKindKeywords:
+        target?.type === "personal" ? [] : parseKeywords(alternateText),
+      alternateKindTitle: input.output.alternateKindTitle?.trim() || null,
     },
   });
 
@@ -341,7 +347,12 @@ export function RuleEditor({
     label: c.primary ? `${c.summary}（メイン）` : c.summary,
   }));
   const targetIsPersonal = target?.type === "personal";
-  const isOutOfOffice = input.output.kind === "outOfOffice";
+  // 「不在」を作ることがあるか（種別が不在、またはキーワードで不在に切り替える）。自動辞退の設定を出すかに使う
+  const isOutOfOffice =
+    input.output.kind === "outOfOffice" ||
+    (!targetIsPersonal && parseKeywords(alternateText).length > 0);
+  // 「種別を切り替えるキーワード」で使う、もう一方の種別
+  const otherKind = input.output.kind === "busy" ? "outOfOffice" : "busy";
 
   return (
     <KeyboardAvoidingView
@@ -561,6 +572,38 @@ export function RuleEditor({
               onChangeText={(title) => updateOutput({ title })}
             />
           </Field>
+          {targetIsPersonal ? null : (
+            <>
+              <Field
+                label={`${OUTPUT_KIND_LABELS[otherKind]}にするキーワード`}
+                help={`カンマ区切り。タイトルにいずれかを含む予定だけ「${OUTPUT_KIND_LABELS[otherKind]}」で作ります（1 つの同期設定の中で種別を使い分ける）`}
+                error={fieldErrors["output.alternateKindKeywords"]}
+              >
+                <TextField
+                  value={alternateText}
+                  onChangeText={setAlternateText}
+                  placeholder={
+                    otherKind === "outOfOffice" ? "例: 外出, 移動" : "例: 社内"
+                  }
+                  autoCapitalize="none"
+                />
+              </Field>
+              {parseKeywords(alternateText).length > 0 ? (
+                <Field
+                  label={`「${OUTPUT_KIND_LABELS[otherKind]}」にしたときのタイトル`}
+                  help="空欄なら種別の名前になります。{title} {account} も使えます"
+                >
+                  <TextField
+                    value={input.output.alternateKindTitle ?? ""}
+                    onChangeText={(alternateKindTitle) =>
+                      updateOutput({ alternateKindTitle })
+                    }
+                    placeholder={OUTPUT_KIND_LABELS[otherKind]}
+                  />
+                </Field>
+              ) : null}
+            </>
+          )}
           <SwitchRow
             label="説明文を写す"
             value={input.output.copyDescription}
@@ -766,6 +809,8 @@ function mapCodeToPath(code: string): string {
       return "target.accountId";
     case "unknown_source_calendar":
       return "source.calendarIds";
+    case "alternate_kind_not_available_for_personal":
+      return "output.alternateKindKeywords";
     case "out_of_office_not_available_for_personal":
       return "output.kind";
     default:

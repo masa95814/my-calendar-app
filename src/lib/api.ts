@@ -80,6 +80,10 @@ export type RuleOutput = {
   maxDurationMinutes: number | null;
   /** 長さの上限をかける予定のキーワード（タイトル）。空なら全部の予定 */
   maxDurationKeywords: string[];
+  /** タイトルにいずれかを含む予定は、もう一方の種別（予定あり ⇔ 不在）で作る。同期先が個人なら使えない */
+  alternateKindKeywords: string[];
+  /** もう一方の種別で作るときの件名。null ならその種別の既定（「不在」「予定あり」） */
+  alternateKindTitle: string | null;
   allDaySourceHandling: AllDaySourceHandling;
   autoDeclineMode: AutoDeclineMode;
   declineMessage: string;
