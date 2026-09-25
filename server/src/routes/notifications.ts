@@ -18,8 +18,10 @@ export function notificationRoutes(deps: NotificationRouteDeps) {
     if (!deps.notify) {
       return c.json({ error: "notifications_not_configured" }, 409);
     }
+    // メンションが届くかも確かめられるように、対応が必要な通知と同じ扱いにする
     await deps.notify(
       `✅ カレンダー連携からのテスト通知です（${c.get("user").email}）`,
+      { urgent: true },
     );
     return c.json({ sent: true });
   });

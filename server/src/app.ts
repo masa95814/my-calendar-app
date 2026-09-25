@@ -53,7 +53,11 @@ export function createApp(deps: AppDependencies) {
   const notify =
     deps.notify ??
     (deps.config.SLACK_WEBHOOK_URL
-      ? createSlackNotifier(deps.config.SLACK_WEBHOOK_URL)
+      ? createSlackNotifier(deps.config.SLACK_WEBHOOK_URL, {
+          ...(deps.config.SLACK_MENTION_USER_ID
+            ? { mentionUserId: deps.config.SLACK_MENTION_USER_ID }
+            : {}),
+        })
       : undefined);
   const sync = createSyncService({
     stores: deps.stores,

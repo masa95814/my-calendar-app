@@ -266,6 +266,8 @@ describe("同期エンジン: 差分同期（/tasks/poll）", () => {
     );
     expect(h.notifications[1]).toContain(`同期エラー: ${rule.name}`);
     expect(h.notifications[1]).toContain("invalid_grant");
+    // どちらも対応が必要なのでメンションを付ける
+    expect(h.urgentFlags).toEqual([true, true]);
 
     await poll(h);
     expect(h.notifications).toHaveLength(2);
@@ -281,6 +283,8 @@ describe("同期エンジン: 差分同期（/tasks/poll）", () => {
     h.calendars.put("acc-a", "primary", meeting("evt-2"));
     await poll(h);
     expect(h.notifications).toEqual([`✅ 同期が復旧しました: ${rule.name}`]);
+    // 復旧は見るだけでよいのでメンションしない
+    expect(h.urgentFlags).toEqual([false]);
   });
 });
 
