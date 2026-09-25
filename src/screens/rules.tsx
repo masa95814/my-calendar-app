@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -32,6 +33,10 @@ import {
   type TargetEntry,
 } from "../lib/rules";
 import type { RulesStackParamList } from "../navigation/types";
+import { RulesSplitView } from "./rulesSplit";
+
+/** この幅以上なら、同期元・同期先・編集を横に並べる（Lynx のような画面） */
+const SPLIT_MIN_WIDTH = 900;
 
 type Props = NativeStackScreenProps<RulesStackParamList, "RulesList">;
 
@@ -43,6 +48,7 @@ export default function RulesListScreen({ navigation }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceId, setSourceId] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
 
   const syncNow = async () => {
     setSyncing(true);
@@ -110,6 +116,63 @@ export default function RulesListScreen({ navigation }: Props) {
     accounts.find((a) => rules.some((r) => r.source.accountId === a.id)) ??
     accounts[0];
   const targets = source ? targetsForSource(source, rules, accounts) : [];
+
+  const orphansCard =
+    orphans.length > 0 ? (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>連携が解除されたアカウントの設定</Text>
+        {orphans.map((rule) => (
+          <Pressable
+            key={rule.id}
+            style={styles.row}
+            onPress={() =>
+              navigation.navigate("RuleEditor", { ruleId: rule.id })
+            }
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>{rule.name}</Text>
+              <Text style={styles.rowMeta}>
+                アカウント未連携のため無効。開いて削除できます
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+  const syncNowButton =
+    rules.length > 0 ? (
+      <Pressable
+        style={styles.syncNow}
+        onPress={syncNow}
+        disabled={syncing}
+        accessibilityRole="button"
+      >
+        <Text style={styles.syncNowText}>
+          {syncing ? "同期中..." : "今すぐ同期（全設定）"}
+        </Text>
+      </Pressable>
+    ) : null;
+
+  if (width >= SPLIT_MIN_WIDTH && accounts.length >= 2 && source) {
+    return (
+      <View style={styles.container}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <RulesSplitView
+          accounts={accounts}
+          rules={rules}
+          source={source}
+          onSelectSource={setSourceId}
+          onChanged={() => void load()}
+          footer={
+            <>
+              {orphansCard}
+              <View style={styles.footer}>{syncNowButton}</View>
+            </>
+          }
+        />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -206,27 +269,7 @@ export default function RulesListScreen({ navigation }: Props) {
         </>
       ) : null}
 
-      {orphans.length > 0 ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>連携が解除されたアカウントの設定</Text>
-          {orphans.map((rule) => (
-            <Pressable
-              key={rule.id}
-              style={styles.row}
-              onPress={() =>
-                navigation.navigate("RuleEditor", { ruleId: rule.id })
-              }
-            >
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle}>{rule.name}</Text>
-                <Text style={styles.rowMeta}>
-                  アカウント未連携のため無効。開いて削除できます
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
+      {orphansCard}
 
       {accounts.length >= 2 ? (
         <View style={styles.footer}>
@@ -234,18 +277,7 @@ export default function RulesListScreen({ navigation }: Props) {
             title="同期設定を追加"
             onPress={() => navigation.navigate("RuleEditor", {})}
           />
-          {rules.length > 0 ? (
-            <Pressable
-              style={styles.syncNow}
-              onPress={syncNow}
-              disabled={syncing}
-              accessibilityRole="button"
-            >
-              <Text style={styles.syncNowText}>
-                {syncing ? "同期中..." : "今すぐ同期（全設定）"}
-              </Text>
-            </Pressable>
-          ) : null}
+          {syncNowButton}
         </View>
       ) : null}
     </ScrollView>
