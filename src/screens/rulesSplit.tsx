@@ -14,7 +14,7 @@ import { RuleEditor } from "./ruleEditor";
 // 左に同期元、中央に同期先を並べて線でつなぎ（Lynx の連携設定画面を参考）、右で選んだ組み合わせを編集する。
 
 /** 行の高さと間隔。線の位置を計算するため固定にする */
-const ROW = 64;
+const ROW = 76;
 const GAP = 10;
 const LINK_WIDTH = 56;
 const GREEN = "#34A853";
