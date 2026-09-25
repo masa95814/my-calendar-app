@@ -20,7 +20,7 @@ import {
   type CalendarEvent,
 } from "../lib/calendar.js";
 import { logger } from "../lib/logger.js";
-import type { Notify } from "../lib/slack.js";
+import type { Notify, NotifyOptions } from "../lib/slack.js";
 import {
   mirrorId,
   syncStateId,
@@ -189,11 +189,11 @@ export function createSyncService(deps: SyncDeps) {
   }
 
   /** 通知を送る。本文の最後にアプリの URL を付ける */
-  async function notify(text: string): Promise<void> {
+  async function notify(text: string, options?: NotifyOptions): Promise<void> {
     if (!deps.notify) {
       return;
     }
-    await deps.notify(deps.appUrl ? `${text}\n${deps.appUrl}` : text);
+    await deps.notify(deps.appUrl ? `${text}\n${deps.appUrl}` : text, options);
   }
 
   async function markAccountReauthRequired(
@@ -210,6 +210,7 @@ export function createSyncService(deps: SyncDeps) {
       });
       await notify(
         `⚠️ ${current.email} の連携が切れました。アプリの「アカウント」タブから、このアカウントを追加し直してください（同じアカウントで連携すると設定はそのまま使えます）`,
+        { urgent: true },
       );
     }
   }
@@ -577,7 +578,9 @@ export function createSyncService(deps: SyncDeps) {
       });
       // 状態が変わったときだけ知らせる（10 分ごとの同期で同じ通知を繰り返さない）
       if (error && !current.lastError) {
-        await notify(`⚠️ 同期エラー: ${current.name}\n${error}`);
+        await notify(`⚠️ 同期エラー: ${current.name}\n${error}`, {
+          urgent: true,
+        });
       } else if (!error && current.lastError) {
         await notify(`✅ 同期が復旧しました: ${current.name}`);
       }

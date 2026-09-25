@@ -89,7 +89,8 @@ cd server
      ```
      URL を変えるときは `gcloud secrets versions add slack-webhook-url --data-file=-`
   3. Cloud Run に渡す: `gcloud run services update my-calendar-app-server --region asia-northeast1 --update-secrets SLACK_WEBHOOK_URL=slack-webhook-url:latest`（以後の自動デプロイ・`deploy.sh` でも引き継ぐ）
-  4. アプリの設定タブの「Slack にテスト通知を送る」で届くか確認する
+  4. （任意）同期エラーと連携切れの通知で自分にメンションする: Slack のプロフィール →「︙」→「メンバー ID をコピー」で ID（`U` から始まる）を控え、`server/.env` に `SLACK_MENTION_USER_ID=<ID>` を書いたうえで `gcloud run services update my-calendar-app-server --region asia-northeast1 --update-env-vars SLACK_MENTION_USER_ID=<ID>`（`.env` に書いておくと `deploy.sh` でも引き継ぐ）。復旧の通知にはメンションしない
+  5. アプリの設定タブの「Slack にテスト通知を送る」で届くか確認する（テスト通知はメンション付き）
 - **費用**: 個人利用の規模（10 分ごとの同期、4 アカウント程度）なら Cloud Run・Firestore・Scheduler とも無料枠に収まる想定。Cloud Scheduler は 3 ジョブまで無料
 
 ## トラブルシューティング

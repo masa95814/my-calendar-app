@@ -58,6 +58,12 @@ const envSchema = z
 
     // 同期エラーや再認証が必要になったときに通知する Slack の Incoming Webhook の URL。未設定なら通知しない
     SLACK_WEBHOOK_URL: z.string().url().optional(),
+    // 同期エラーと連携切れの通知でメンションする Slack のメンバー ID（例: U01ABCDEF）。未設定ならメンションしない
+    // Slack のプロフィール →「︙」→「メンバー ID をコピー」で確認できる
+    SLACK_MENTION_USER_ID: z
+      .string()
+      .regex(/^[UW][A-Z0-9]+$/, "Slack のメンバー ID（U から始まる英数字）")
+      .optional(),
 
     // watch チャネルの有効期間（秒）。Google の上限に合わせて既定は 7 日
     WATCH_TTL_SECONDS: z.coerce
