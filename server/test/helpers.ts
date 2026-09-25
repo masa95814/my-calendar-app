@@ -307,6 +307,8 @@ export type TestHarness = {
   clock: { now: Date };
   /** 送られた通知の本文 */
   notifications: string[];
+  /** 対応が必要な（メンションを付ける）通知だったか。notifications と同じ順 */
+  urgentFlags: boolean[];
 };
 
 /** すべての依存を偽物にしたアプリを組み立てる */
@@ -322,6 +324,7 @@ export function buildTestApp(
   let stateCounter = 0;
   let idCounter = 0;
   const notifications: string[] = [];
+  const urgentFlags: boolean[] = [];
 
   const { env, ...depOverrides } = overrides;
   const app = createApp({
@@ -335,8 +338,9 @@ export function buildTestApp(
     now: () => clock.now,
     randomState: () => `state-${++stateCounter}`,
     randomId: () => `id-${++idCounter}`,
-    notify: async (text) => {
+    notify: async (text, options) => {
       notifications.push(text);
+      urgentFlags.push(Boolean(options?.urgent));
     },
     ...depOverrides,
   });
@@ -350,6 +354,7 @@ export function buildTestApp(
     cipher,
     clock,
     notifications,
+    urgentFlags,
   };
 }
 
