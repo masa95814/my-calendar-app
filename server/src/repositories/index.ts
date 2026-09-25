@@ -151,6 +151,12 @@ export interface ChannelStore {
   delete(channelId: string): Promise<void>;
 }
 
+/** 予算アラートで、期間ごとに知らせた一番大きいしきい値（0.5 = 50%）を覚える（同じ通知を繰り返さない） */
+export interface BudgetAlertStore {
+  getNotifiedThreshold(key: string): Promise<number | undefined>;
+  setNotifiedThreshold(key: string, threshold: number): Promise<void>;
+}
+
 export interface RuleStore {
   list(uid: string): Promise<SyncRule[]>;
   get(uid: string, ruleId: string): Promise<SyncRule | undefined>;
@@ -175,4 +181,5 @@ export type Stores = {
   syncStates: SyncStateStore;
   mirrors: MirrorStore;
   channels: ChannelStore;
+  budgetAlerts: BudgetAlertStore;
 };
