@@ -228,12 +228,24 @@ export function createSyncService(deps: SyncDeps) {
     targetClient: CalendarClient,
     summary: SyncSummary,
     windowStart: Date,
+    /**
+     * 全件同期のとき、送信元カレンダーの対応表をまとめて読んだもの（id → 対応表）。
+     * 予定ごとに Firestore を読まずに済ませ、作成・更新・削除はここにも反映する。
+     * 差分同期では変わった予定が少ないので渡さず、1 件ずつ読む
+     */
+    records?: Map<string, MirrorRecord>,
   ): Promise<void> {
     if (!event.id) {
       return;
     }
     const id = mirrorId(rule.id, group.calendarId, event.id);
-    const existing = await stores.mirrors.get(uid, id);
+    const existing = records
+      ? records.get(id)
+      : await stores.mirrors.get(uid, id);
+    const saveRecord = async (value: MirrorRecord) => {
+      await stores.mirrors.upsert(uid, value);
+      records?.set(value.id, value);
+    };
     const evaluation = evaluateEvent(event, rule, {
       now: deps.now(),
       windowStart,
@@ -247,6 +259,7 @@ export function createSyncService(deps: SyncDeps) {
           existing.targetEventId,
         );
         await stores.mirrors.delete(uid, id);
+        records?.delete(id);
         summary.deleted++;
       } else {
         summary.skipped++;
@@ -307,7 +320,7 @@ export function createSyncService(deps: SyncDeps) {
 
     if (!existing) {
       const created = await insertMirror();
-      await stores.mirrors.upsert(uid, record(created.id ?? ""));
+      await saveRecord(record(created.id ?? ""));
       summary.created++;
       return;
     }
@@ -319,7 +332,7 @@ export function createSyncService(deps: SyncDeps) {
         existing.targetEventId,
       );
       const created = await insertMirror();
-      await stores.mirrors.upsert(uid, record(created.id ?? ""));
+      await saveRecord(record(created.id ?? ""));
       summary.updated++;
       return;
     }
@@ -327,7 +340,7 @@ export function createSyncService(deps: SyncDeps) {
     if (existing.fingerprint === fingerprint) {
       // 終了時刻の項目が追加される前の対応表は、ここで埋める（予定自体は変えない）
       if (!existing.sourceEndAt) {
-        await stores.mirrors.upsert(uid, {
+        await saveRecord({
           ...existing,
           sourceEndAt: eventEnd(event) ?? null,
         });
@@ -338,14 +351,14 @@ export function createSyncService(deps: SyncDeps) {
 
     try {
       await patchMirror(existing.targetCalendarId, existing.targetEventId);
-      await stores.mirrors.upsert(uid, record(existing.targetEventId));
+      await saveRecord(record(existing.targetEventId));
     } catch (error) {
       if (!(error instanceof NotFoundError)) {
         throw error;
       }
       // 同期先で手動削除されていたら作り直す（設計方針: ミラーは再作成する）
       const created = await insertMirror();
-      await stores.mirrors.upsert(uid, record(created.id ?? ""));
+      await saveRecord(record(created.id ?? ""));
     }
     summary.updated++;
   }
@@ -421,6 +434,19 @@ export function createSyncService(deps: SyncDeps) {
       return summary;
     }
 
+    // 全件同期では、この送信元カレンダーの対応表を 1 回だけ読み、予定の処理と掃除で使い回す
+    // （予定ごと・同期設定ごとに読み直すと、Firestore の読み取りが 1 日の無料枠を超えることがあったため）
+    const records = usedFull
+      ? new Map(
+          (
+            await stores.mirrors.listBySourceCalendar(
+              uid,
+              group.account.id,
+              group.calendarId,
+            )
+          ).map((r) => [r.id, r] as const),
+        )
+      : undefined;
     const seenEventIds = new Set<string>();
     const targetClients = new Map<string, CalendarClient>();
     const ruleErrors = new Map<string, string>();
@@ -453,6 +479,7 @@ export function createSyncService(deps: SyncDeps) {
             targetClient,
             summary,
             windowStart,
+            records,
           );
         } catch (error) {
           const message = describeError(error);
@@ -472,7 +499,7 @@ export function createSyncService(deps: SyncDeps) {
     }
 
     // 全件同期のときは、元予定が無くなった（範囲外・削除済み）ミラーを掃除する
-    if (usedFull) {
+    if (records) {
       for (const rule of group.rules) {
         if (ruleErrors.has(rule.id)) {
           continue;
@@ -481,12 +508,8 @@ export function createSyncService(deps: SyncDeps) {
         if (!targetAccount) {
           continue;
         }
-        const records = await stores.mirrors.listBySourceCalendar(
-          uid,
-          group.account.id,
-          group.calendarId,
-        );
-        for (const record of records) {
+        // 処理中の作成・削除を反映した対応表を使う（途中で消すので写しを回す）
+        for (const record of [...records.values()]) {
           if (
             record.ruleId !== rule.id ||
             seenEventIds.has(record.sourceEventId)
@@ -509,6 +532,7 @@ export function createSyncService(deps: SyncDeps) {
               record.targetEventId,
             );
             await stores.mirrors.delete(uid, record.id);
+            records.delete(record.id);
             summary.deleted++;
           } catch (error) {
             summary.errors.push(`${rule.name}: ${describeError(error)}`);
@@ -529,10 +553,11 @@ export function createSyncService(deps: SyncDeps) {
           const client =
             targetClients.get(targetAccount.id) ??
             deps.calendarFor(targetAccount);
+          // タグの検索はこの送信元カレンダーのミラーに絞るので、同じカレンダーの対応表と突き合わせれば足りる
           const known = new Set(
-            (await stores.mirrors.listByRule(uid, rule.id)).map(
-              (r) => r.targetEventId,
-            ),
+            [...records.values()]
+              .filter((r) => r.ruleId === rule.id)
+              .map((r) => r.targetEventId),
           );
           const tagged = await fetchTaggedEvents(client, TARGET_CALENDAR_ID, [
             `${MIRROR_KEYS.ruleId}=${rule.id}`,

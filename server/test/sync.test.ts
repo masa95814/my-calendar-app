@@ -584,3 +584,73 @@ describe("同期エンジン: 今日の予定と過去のミラー", () => {
     expect(filled?.sourceEndAt).toEqual(new Date("2026-09-24T02:00:00Z"));
   });
 });
+
+describe("同期エンジン: Firestore の読み取り回数", () => {
+  /** 対応表（mirrors）の読み取りを数える */
+  function countMirrorReads(h: TestHarness) {
+    const counts = { get: 0, listBySourceCalendar: 0, listByRule: 0 };
+    const mirrors = h.stores.mirrors;
+    const { get, listBySourceCalendar, listByRule } = mirrors;
+    mirrors.get = async (...args) => {
+      counts.get++;
+      return get(...args);
+    };
+    mirrors.listBySourceCalendar = async (...args) => {
+      counts.listBySourceCalendar++;
+      return listBySourceCalendar(...args);
+    };
+    mirrors.listByRule = async (...args) => {
+      counts.listByRule++;
+      return listByRule(...args);
+    };
+    return counts;
+  }
+
+  it("全件同期では対応表を送信元カレンダーごとに 1 回だけ読み、予定ごと・同期設定ごとには読まない", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    for (const id of ["evt-1", "evt-2", "evt-3"]) {
+      h.calendars.put("acc-a", "primary", meeting(id));
+    }
+    await createRule(h);
+    await createRule(h, {
+      ...ruleInput,
+      target: { accountId: "acc-p" },
+      output: { kind: "busy" },
+    });
+    expect(mirrorsInB(h)).toHaveLength(3);
+
+    const counts = countMirrorReads(h);
+    h.calendars.expireSyncTokens();
+    expect(await poll(h)).toMatchObject({ processed: 3, errors: [] });
+    expect(counts).toEqual({ get: 0, listBySourceCalendar: 1, listByRule: 0 });
+    // 読み取りを減らしても、ミラーは消えも増えもしない
+    expect(mirrorsInB(h)).toHaveLength(3);
+    expect(h.calendars.list("acc-p", "primary")).toHaveLength(3);
+  });
+
+  it("差分同期では変わった予定の分だけ 1 件ずつ読む", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    for (const id of ["evt-1", "evt-2", "evt-3"]) {
+      h.calendars.put("acc-a", "primary", meeting(id));
+    }
+    await createRule(h);
+    const counts = countMirrorReads(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-2", { summary: "変更" }));
+    expect(await poll(h)).toMatchObject({ processed: 1 });
+    expect(counts).toEqual({ get: 1, listBySourceCalendar: 0, listByRule: 0 });
+  });
+
+  it("全件同期の途中で作ったミラーは、同じ同期の掃除で消さない", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    await createRule(h);
+    // 新しい予定が増えた状態で全件同期（作成と掃除が同じ同期の中で起きる）
+    h.calendars.put("acc-a", "primary", meeting("evt-new"));
+    h.calendars.expireSyncTokens();
+    expect(await poll(h)).toMatchObject({ created: 1, deleted: 0 });
+    expect(mirrorsInB(h)).toHaveLength(2);
+  });
+});
