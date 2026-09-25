@@ -45,7 +45,7 @@ jobs:
       - name: モック表示の Web 版アプリをビルド
         run: |
           npm ci
-          npx expo export --platform web --output-dir dist-mock
+          npx expo export --platform web --output-dir dist-mock --clear
         env:
           CI: "1"
           EXPO_PUBLIC_MOCK: "1"
