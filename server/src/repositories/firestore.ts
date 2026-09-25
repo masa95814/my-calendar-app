@@ -29,6 +29,7 @@ import type {
 export function createFirestoreStores(db: Firestore): Stores {
   const statesCollection = db.collection("oauthStates");
   const channelsCollection = db.collection("channels");
+  const budgetAlertsCollection = db.collection("budgetAlerts");
   const usersCollection = db.collection("users");
   const userDoc = (uid: string) => usersCollection.doc(uid);
   const accountsCollection = (uid: string) =>
@@ -240,6 +241,18 @@ export function createFirestoreStores(db: Firestore): Stores {
       },
       async delete(channelId) {
         await channelsCollection.doc(channelId).delete();
+      },
+    },
+
+    budgetAlerts: {
+      async getNotifiedThreshold(key) {
+        const data = (await budgetAlertsCollection.doc(key).get()).data();
+        return typeof data?.threshold === "number" ? data.threshold : undefined;
+      },
+      async setNotifiedThreshold(key, threshold) {
+        await budgetAlertsCollection
+          .doc(key)
+          .set({ threshold, updatedAt: Timestamp.now() });
       },
     },
 

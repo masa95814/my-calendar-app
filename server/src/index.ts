@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { OAuth2Client } from "google-auth-library";
 
 import { createApp } from "./app.js";
 import { loadConfig, loadDotEnv } from "./config.js";
@@ -39,6 +40,12 @@ const calendarClientFactory = createCalendarClientFactory({
   clientSecret: config.GOOGLE_OAUTH_CLIENT_SECRET,
 });
 
+// 予算アラートの Pub/Sub push に付く ID トークンを検証する（送信元のサービスアカウントと宛先 URL を確認）
+const pushTokenVerifier = new OAuth2Client();
+const budgetAudience = config.PUBLIC_BASE_URL
+  ? `${config.PUBLIC_BASE_URL}/webhooks/budget`
+  : undefined;
+
 const app = createApp({
   config,
   cipher,
@@ -58,6 +65,25 @@ const app = createApp({
       decoded.email ?? (await firebaseAuth().getUser(decoded.uid)).email;
     return { uid: decoded.uid, email };
   },
+  ...(config.BUDGET_PUSH_SA_EMAIL && budgetAudience
+    ? {
+        verifyPushToken: async (idToken: string) => {
+          try {
+            const ticket = await pushTokenVerifier.verifyIdToken({
+              idToken,
+              audience: budgetAudience,
+            });
+            const payload = ticket.getPayload();
+            return payload?.email_verified &&
+              payload.email === config.BUDGET_PUSH_SA_EMAIL
+              ? payload.email
+              : undefined;
+          } catch {
+            return undefined;
+          }
+        },
+      }
+    : {}),
 });
 
 serve({ fetch: app.fetch, port: config.PORT }, (info) => {

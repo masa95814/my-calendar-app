@@ -65,6 +65,10 @@ const envSchema = z
       .regex(/^[UW][A-Z0-9]+$/, "Slack のメンバー ID（U から始まる英数字）")
       .optional(),
 
+    // 予算アラートを Pub/Sub から push するサービスアカウントのメール。設定すると /webhooks/budget を受け付ける
+    // （push に付く ID トークンを、このアカウント・このサービスの URL 宛てとして検証する）
+    BUDGET_PUSH_SA_EMAIL: z.string().email().optional(),
+
     // watch チャネルの有効期間（秒）。Google の上限に合わせて既定は 7 日
     WATCH_TTL_SECONDS: z.coerce
       .number()
