@@ -15,5 +15,7 @@ if grep -qE '^EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=.+' .env 2>/dev/null; then
 fi
 
 rm -rf dist
-npx expo export --platform web --output-dir dist
+# --clear: ビルドのキャッシュを使わない（直前にモック表示でビルドしていると、その設定が残ることがあるため）
+npx expo export --platform web --output-dir dist --clear
+./hosting/check-not-mock.sh dist
 SITE="$SITE" PUBLIC_DIR="$PWD/dist" SPA=1 ./hosting/deploy.sh "$PROJECT"

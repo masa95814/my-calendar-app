@@ -36,6 +36,7 @@ npx expo start --web    # Web 版（http://localhost:8081）
 
 - **本番**: `EXPO_PUBLIC_API_BASE_URL` に Cloud Run の URL、Firebase の値に本番のウェブアプリ設定、`EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` は空
 - **ローカル開発**: `.env.example` のとおり。`server/` のバックエンドと Firebase エミュレータを先に起動する（[server/README.md](server/README.md)）
+- **モック表示**（画面の確認だけ）: `npm run web:mock`。サーバーにも Firebase にもつながず、見本のデータで動く。develop 向けの PR にはモック表示のプレビュー URL が自動でコメントされる（[docs/deploy.md](docs/deploy.md)）
 
 スマホで動かす場合の注意:
 

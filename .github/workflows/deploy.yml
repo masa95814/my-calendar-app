@@ -52,7 +52,8 @@ jobs:
       - name: Web 版アプリをビルド
         run: |
           npm ci
-          npx expo export --platform web --output-dir dist
+          npx expo export --platform web --output-dir dist --clear
+          ./hosting/check-not-mock.sh dist
         env:
           CI: "1"
           EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
@@ -63,6 +64,7 @@ jobs:
             ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
           EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
           EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: ""
+          EXPO_PUBLIC_MOCK: ""
 
       - name: Web 版アプリを公開
         run:
