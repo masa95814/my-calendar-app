@@ -1,5 +1,6 @@
 import { appEnv } from "../config/env";
 import { auth } from "./firebase";
+import { createMockApi } from "./mockApi";
 
 /** バックエンドが返す検証エラーの明細（`details`） */
 export type ApiErrorDetail = {
@@ -188,7 +189,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-export const api = {
+const realApi = {
   me: () => request<{ uid: string; email: string }>("/api/me"),
 
   listAccounts: () => request<{ accounts: LinkedAccount[] }>("/api/accounts"),
@@ -261,6 +262,11 @@ export const api = {
       { method: "POST" },
     ),
 };
+
+export type Api = typeof realApi;
+
+/** アプリが使う API。モック表示（EXPO_PUBLIC_MOCK=1）では見本のデータを返すモックに差し替える */
+export const api: Api = appEnv.mock ? createMockApi(ApiError) : realApi;
 
 /** 同期結果を 1 行の文言にする */
 export function describeSyncSummary(summary: SyncSummary): string {

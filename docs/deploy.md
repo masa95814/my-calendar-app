@@ -18,6 +18,16 @@
 - Cloud Run の環境変数とシークレットは既存の設定を引き継ぐ。変える場合は手元で `server/scripts/deploy.sh` を実行する
 - GitHub のリポジトリ変数（Settings → Secrets and variables → Actions → Variables）: `GCP_PROJECT_ID`、`GCP_REGION`、`CLOUD_RUN_SERVICE`、`GCP_WIF_PROVIDER`、`GCP_DEPLOY_SA`、`EXPO_PUBLIC_*`（すべて公開情報）
 
+## 画面の確認（モック表示・PR ごとのプレビュー URL）
+
+本物のサーバーやデータにつながず、見本のデータで画面を確かめられる。
+
+- **モック表示**: `EXPO_PUBLIC_MOCK=1` でビルドすると、サーバーにも Firebase にもつながず、アプリ内の見本のデータ（`src/lib/mockApi.ts`）で動く。ログインは省き、画面の上に「モック表示」の帯を出す。変更はそのタブの中だけで、再読み込みで元に戻る
+  - 手元: `npm run web:mock`（開発サーバー）、`npm run export:mock`（`dist-mock/` にビルド）
+- **PR ごとのプレビュー URL**: develop 向けの PR を作る・更新するたびに、`.github/workflows/preview.yml` がモック表示でビルドし、Web 版アプリのサイトのプレビューチャネル（`pr-<番号>`）に公開して、URL を PR にコメントする。7 日で自動的に消える。本番（live）には触らない
+  - 初回のみ `./hosting/setup-preview-ci.sh` を実行する（プレビュー専用の Workload Identity のプールとサービスアカウント、GitHub のリポジトリ変数を作る）。本番用のプールとは分けてある（同じプールだと PR から本番用のサービスアカウントになれてしまうため）
+  - 手元からプレビューに出す: `SITE=<サイト> PUBLIC_DIR="$PWD/dist-mock" SPA=1 CHANNEL=<名前> ./hosting/deploy.sh`
+
 ## 1. 事前準備（初回のみ）
 
 ```bash

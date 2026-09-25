@@ -15,6 +15,12 @@ export const appEnv = {
     appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? "",
   },
 
+  /**
+   * 画面確認用のモック表示（EXPO_PUBLIC_MOCK=1）。サーバーにも Firebase にもつながず、見本のデータで動く。
+   * ログインも省く。PR ごとのプレビュー URL と `npm run web:mock` で使う
+   */
+  mock: process.env.EXPO_PUBLIC_MOCK === "1",
+
   /** Firebase Auth エミュレータに接続する場合のホスト（例: 127.0.0.1:9099）。未設定なら本物に接続 */
   firebaseAuthEmulatorHost: process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST,
 };

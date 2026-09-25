@@ -7,6 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "web:mock": "EXPO_PUBLIC_MOCK=1 expo start --web",
+    "export:mock": "EXPO_PUBLIC_MOCK=1 expo export --platform web --output-dir dist-mock",
     "lint": "expo lint",
     "format": "prettier --check \"**/*.{ts,tsx,js,mjs,md,json}\"",
     "format:fix": "prettier --write \"**/*.{ts,tsx,js,mjs,md,json}\"",
