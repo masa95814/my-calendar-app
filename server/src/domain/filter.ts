@@ -186,7 +186,12 @@ export function evaluateEvent(
   }
   if (!always && rule.filters.minAttendees !== null) {
     // 参加者情報が無い予定は自分ひとりの予定として数える
-    const count = attendees.length > 0 ? attendees.length : 1;
+    let count = attendees.length > 0 ? attendees.length : 1;
+    // ほかの人が主催した予定は、少なくとも主催者と自分の 2 人。ゲストリストが非公開
+    // （guestsCanSeeOtherGuests=false）だと参加者が自分しか見えないため、見えている人数より多めに数える
+    if (event.organizer && !event.organizer.self) {
+      count = Math.max(count, 2);
+    }
     if (count < rule.filters.minAttendees) {
       return no("attendees");
     }
