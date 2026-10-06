@@ -174,6 +174,38 @@ describe("evaluateEvent", () => {
     expect(reason(meeting, withFilters({ minAttendees: 3 }))).toBe("attendees");
   });
 
+  it("ほかの人が主催した予定は、ゲストリストが非公開で自分しか見えなくても 2 人として数える", () => {
+    // 例: 全員に招待される朝礼。ゲストリストを非公開にしていると参加者は自分だけが返る
+    const hiddenGuests = event({
+      organizer: { email: "host@a", self: false },
+      guestsCanSeeOtherGuests: false,
+      attendees: [{ email: "me@a", self: true, responseStatus: "accepted" }],
+    });
+    expect(reason(hiddenGuests, withFilters({ minAttendees: 2 }))).toBe(
+      "mirror",
+    );
+    // 3 人以上の条件には、見えている人数が足りなければ当たらない
+    expect(reason(hiddenGuests, withFilters({ minAttendees: 3 }))).toBe(
+      "attendees",
+    );
+    // 自分で作った自分だけの予定（会議室の予約など）は今まで通り 1 人
+    const ownBlock = event({
+      organizer: { email: "me@a", self: true },
+      attendees: [
+        {
+          email: "me@a",
+          self: true,
+          organizer: true,
+          responseStatus: "accepted",
+        },
+        { email: "room@a", resource: true },
+      ],
+    });
+    expect(reason(ownBlock, withFilters({ minAttendees: 2 }))).toBe(
+      "attendees",
+    );
+  });
+
   it("会議リンクの有無", () => {
     expect(reason(event(), withFilters({ requireMeetLink: true }))).toBe(
       "no_conference_link",
