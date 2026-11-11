@@ -454,6 +454,17 @@ export function createSyncService(deps: SyncDeps) {
     const targetClients = new Map<string, CalendarClient>();
     const ruleErrors = new Map<string, string>();
 
+    // 同期先の連携が切れている同期設定は、再連携するまで書き込みを試さずエラーのままにする。
+    // 試すと予定が変わった回だけ失敗し、変わらない回は成功扱いになって、
+    // 「同期エラー」と「復旧」の通知が交互に出ていたため
+    for (const rule of group.rules) {
+      const target = accountsById.get(rule.target.accountId);
+      if (target?.status === "reauth_required") {
+        ruleErrors.set(rule.id, `同期先の再連携が必要: ${target.email}`);
+        summary.errors.push(`${rule.name}: 同期先の再連携が必要`);
+      }
+    }
+
     for (const event of fetched.events) {
       if (event.id) {
         seenEventIds.add(event.id);
@@ -488,6 +499,22 @@ export function createSyncService(deps: SyncDeps) {
           const message = describeError(error);
           if (error instanceof AuthRevokedError) {
             await markAccountReauthRequired(uid, targetAccount);
+            // 同じ同期先を使うほかの同期設定も、この同期の中で書き込みを試さない
+            accountsById.set(targetAccount.id, {
+              ...targetAccount,
+              status: "reauth_required",
+            });
+            for (const other of group.rules) {
+              if (
+                other.target.accountId === targetAccount.id &&
+                !ruleErrors.has(other.id)
+              ) {
+                ruleErrors.set(
+                  other.id,
+                  `同期先の再連携が必要: ${targetAccount.email}`,
+                );
+              }
+            }
           }
           ruleErrors.set(rule.id, `同期先への反映に失敗: ${message}`);
           summary.errors.push(`${rule.name}: ${message}`);

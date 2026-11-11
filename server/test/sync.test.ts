@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { SyncRule } from "../src/domain/rules.js";
 import type { CalendarEvent } from "../src/lib/calendar.js";
+import {
+  CALENDAR_EVENTS_SCOPE,
+  CALENDAR_LIST_SCOPE,
+} from "../src/lib/google.js";
 import type { SyncSummary } from "../src/services/sync.js";
 import {
   buildTestApp,
@@ -10,6 +14,8 @@ import {
   seedAccounts,
   type TestHarness,
 } from "./helpers.js";
+
+const LINK_SCOPE_STRING = `openid email ${CALENDAR_EVENTS_SCOPE} ${CALENDAR_LIST_SCOPE}`;
 
 const ruleInput = {
   source: { accountId: "acc-a", calendarIds: ["primary"] },
@@ -687,5 +693,70 @@ describe("同期エンジン: もう一方の種別にするキーワード", ()
     const [record] = [...h.stores.mirrors.data.values()];
     expect(record?.kind).toBe("outOfOffice");
     expect(record?.targetEventId).toBe(mirror?.id);
+  });
+});
+
+describe("同期エンジン: 同期先の連携が切れたとき", () => {
+  it("再連携するまで書き込みを試さずエラーのままにし、「同期エラー」と「復旧」を交互に通知しない", async () => {
+    const h = buildTestApp();
+    await seedAccounts(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-1"));
+    const { rule } = await createRule(h);
+
+    // 同期先 B の連携が切れ、元予定が変わる
+    h.calendars.revoke("acc-b");
+    h.calendars.put("acc-a", "primary", meeting("evt-2"));
+    await poll(h);
+    expect((await h.stores.accounts.get("owner-uid", "acc-b"))?.status).toBe(
+      "reauth_required",
+    );
+    expect(h.notifications).toHaveLength(2); // 連携切れ + 同期エラー
+
+    // 元予定が変わらない回も、変わった回も、エラーのまま（復旧の通知は出さない）
+    await poll(h);
+    h.calendars.put("acc-a", "primary", meeting("evt-3"));
+    h.calendars.calls.length = 0;
+    await poll(h);
+    expect(
+      (await h.stores.rules.get("owner-uid", rule.id))?.lastError,
+    ).toContain("同期先の再連携が必要");
+    expect(h.notifications).toHaveLength(2);
+    // 連携が切れた同期先には書き込みを試さない
+    expect(
+      h.calendars.calls.filter((c) => c.accountId === "acc-b"),
+    ).toHaveLength(0);
+
+    // 再連携すると、その場で全件同期して止まっていた間の変更（evt-2、evt-3）を反映し、復旧を 1 回だけ知らせる
+    h.calendars.unrevoke("acc-b");
+    const link = await h.app.request("/api/accounts/link", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ returnTo: "mycalendarapp://accounts" }),
+    });
+    const { url } = (await link.json()) as { url: string };
+    const state = new URL(url).searchParams.get("state");
+    h.google.codes.set("code-relink", {
+      idToken: "id-b",
+      refreshToken: "refresh-b-2",
+      scope: LINK_SCOPE_STRING,
+    });
+    h.google.identities.set("id-b", {
+      sub: "acc-b",
+      email: "b@company-b.example",
+      emailVerified: true,
+      hd: "company-b.example",
+    });
+    await h.app.request(
+      `/auth/google/callback?code=code-relink&state=${state}`,
+    );
+    expect((await h.stores.accounts.get("owner-uid", "acc-b"))?.status).toBe(
+      "ok",
+    );
+    expect(h.calendars.list("acc-b", "primary")).toHaveLength(3);
+    expect(
+      (await h.stores.rules.get("owner-uid", rule.id))?.lastError,
+    ).toBeNull();
+    expect(h.notifications.at(-1)).toBe(`✅ 同期が復旧しました: ${rule.name}`);
+    expect(h.notifications).toHaveLength(3);
   });
 });
