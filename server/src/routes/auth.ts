@@ -12,6 +12,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { appendQuery, validateReturnUrl } from "../lib/url.js";
 import type { OAuthState, Stores } from "../repositories/index.js";
+import type { SyncService } from "../services/sync.js";
 
 /** Firebase Authentication のユーザー操作（テストで差し替える） */
 export type FirebaseUserService = {
@@ -29,6 +30,8 @@ export type AuthRouteDeps = {
   cipher: TokenCipher;
   now: () => Date;
   randomState: () => string;
+  /** 再連携したときに、止まっていた同期設定を全件同期する */
+  sync?: Pick<SyncService, "syncUser">;
 };
 
 /**
@@ -203,5 +206,36 @@ async function handleLink(
     type: identity.hd ? "workspace" : "personal",
     calendarCount: calendars.length,
   });
+  // 連携が切れていたアカウントを再連携したら、止まっていた間の変更をすぐ取り戻す
+  // （止まっている間は書き込みを試さないため。全件同期しないと翌朝の全件同期まで反映されない）
+  if (existing?.status === "reauth_required" && deps.sync) {
+    const ruleIds = (await deps.stores.rules.list(saved.uid))
+      .filter(
+        (r) =>
+          r.enabled &&
+          (r.source.accountId === identity.sub ||
+            r.target.accountId === identity.sub),
+      )
+      .map((r) => r.id);
+    if (ruleIds.length > 0) {
+      try {
+        const summary = await deps.sync.syncUser(saved.uid, {
+          full: true,
+          ruleIds,
+        });
+        logger.info("再連携したアカウントの同期設定を全件同期しました", {
+          uid: saved.uid,
+          accountId: identity.sub,
+          ...summary,
+        });
+      } catch (error) {
+        // 同期に失敗しても連携は終わっているので、次の定期同期に任せる
+        logger.warn("再連携後の全件同期に失敗しました", {
+          uid: saved.uid,
+          error: String(error),
+        });
+      }
+    }
+  }
   return { linked: identity.email.toLowerCase() };
 }

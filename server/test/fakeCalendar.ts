@@ -32,6 +32,8 @@ export type FakeCalendars = {
   expireSyncTokens(): void;
   /** そのアカウントの呼び出しをすべて認証失効にする */
   revoke(accountId: string): void;
+  /** 認証失効を戻す（再連携の再現用） */
+  unrevoke(accountId: string): void;
   calls: FakeCall[];
   now: () => Date;
 };
@@ -88,6 +90,9 @@ export function createFakeCalendars(now: () => Date): FakeCalendars {
     },
     revoke(accountId) {
       revoked.add(accountId);
+    },
+    unrevoke(accountId) {
+      revoked.delete(accountId);
     },
     clientFor(accountId) {
       const guard = () => {
